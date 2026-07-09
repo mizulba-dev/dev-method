@@ -30,13 +30,13 @@ direction 置き場: <パス>          # 例: paput は repo 内 docs/direction 
 ```bash
 # Claude Code
 claude plugin marketplace add mizulba-dev/dev-method
-claude plugin install dev-method@dev-method
-claude plugin install dev-method-claude@dev-method
+claude plugin install dev-method@mizulba-dev
+claude plugin install dev-method-claude@mizulba-dev
 
 # Codex
 codex plugin marketplace add git@github.com:mizulba-dev/dev-method.git
-codex plugin add dev-method@dev-method
-codex plugin add dev-method-codex@dev-method
+codex plugin add dev-method@mizulba-dev
+codex plugin add dev-method-codex@mizulba-dev
 ```
 
 ## リリース手順
@@ -44,8 +44,8 @@ codex plugin add dev-method-codex@dev-method
 1. 変更をコミット（日本語メッセージ）
 2. `npm version patch` — version スクリプトが全6 plugin.json を自動同期して同一コミット + tag を作る
 3. `git push origin main --follow-tags`（`git ls-remote --tags origin` で tag 到達を確認）
-4. Claude Code: `claude plugin marketplace update dev-method` → `claude plugin update dev-method@dev-method` と `claude plugin update dev-method-claude@dev-method`（適用は再起動後）
-5. Codex: `codex plugin marketplace upgrade dev-method` → `codex plugin add dev-method@dev-method` と `codex plugin add dev-method-codex@dev-method`（add が更新を兼ねる。適用は完全再起動後）
+4. Claude Code: `claude plugin marketplace update mizulba-dev` → `claude plugin update dev-method@mizulba-dev` と `claude plugin update dev-method-claude@mizulba-dev`（適用は再起動後）
+5. Codex: `codex plugin marketplace upgrade mizulba-dev` → `codex plugin add dev-method@mizulba-dev` と `codex plugin add dev-method-codex@mizulba-dev`（add が更新を兼ねる。適用は完全再起動後）
 
 ## 未検証ポイント
 

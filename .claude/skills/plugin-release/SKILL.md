@@ -19,14 +19,14 @@ dev-method（このリポジトリ）の変更を patch リリースし、3プ�
 1. **リリース**: `npm version patch`。version スクリプトが全6 plugin.json（3プラグイン × claude/codex マニフェスト）を自動同期して同一コミット（メッセージ＝バージョン番号）+ annotated tag `vX.Y.Z` を作る。
 2. **push**: `git push origin main --follow-tags`。`git ls-remote --tags origin` で `vX.Y.Z` の到達を必ず確認する。
 3. **Claude Code 反映**（`plugin@marketplace` 形式必須）:
-   - `claude plugin marketplace update dev-method`
-   - `claude plugin update dev-method@dev-method`
-   - `claude plugin update dev-method-claude@dev-method`
+   - `claude plugin marketplace update mizulba-dev`
+   - `claude plugin update dev-method@mizulba-dev`
+   - `claude plugin update dev-method-claude@mizulba-dev`
    - 適用は再起動後。
 4. **Codex 反映**（add が再インストール＝更新を兼ねる）:
-   - `codex plugin marketplace upgrade dev-method`
-   - `codex plugin add dev-method@dev-method`
-   - `codex plugin add dev-method-codex@dev-method`
+   - `codex plugin marketplace upgrade mizulba-dev`
+   - `codex plugin add dev-method@mizulba-dev`
+   - `codex plugin add dev-method-codex@mizulba-dev`
    - 適用はアプリ完全再起動後。
 5. **報告**: 新バージョン番号・tag の到達・両 CLI の反映結果をまとめる。
 
