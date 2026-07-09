@@ -6,13 +6,14 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `cross-review` / `playwright-cli` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（implementer teammate 機構）+ `agents/implementer.md` | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（multi_agent サブエージェント）+ `implementer.toml` | Codex のみ |
 
 - `direction` — 実装計画のライフサイクル管理。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回に `~/.codex/agents/implementer.toml` を自動セットアップ）
+- `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
 
 plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。team-impl は各クライアントに自分用の1つだけが入るため名前衝突しない。
 
