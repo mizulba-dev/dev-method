@@ -4,6 +4,6 @@
   "private": true,
   "description": "個人開発手法プラグイン（Claude Code / Codex 両対応）",
   "scripts": {
-    "version": "node scripts/sync-plugin-version.mjs && git add src/plugin/.claude-plugin/plugin.json src/plugin/.codex-plugin/plugin.json"
+    "version": "node scripts/sync-plugin-version.mjs && git add src/plugin/.claude-plugin/plugin.json src/plugin/.codex-plugin/plugin.json src/plugin-claude/.claude-plugin/plugin.json src/plugin-claude/.codex-plugin/plugin.json src/plugin-codex/.claude-plugin/plugin.json src/plugin-codex/.codex-plugin/plugin.json"
   }
 }

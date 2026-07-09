@@ -6,7 +6,7 @@ argument-hint: <計画ファイルのパス> [タスクディレクトリ]
 
 # team-impl: Claude 実装 + クロスモデルレビューのチーム実装
 
-**Claude Code 専用**。implementer teammate・SendMessage・TaskCreate は Claude Code のハーネス機能のため、Codex 上で呼ばれた場合は本スキルを実行せず、direction の計画に沿って自分で直列実装し `cross-review` スキルでレビューする縮退運用を提案する。
+**Claude Code 専用**（dev-method-claude プラグインで配布。Codex には同名スキルの Codex 最適化版が dev-method-codex にある）。
 
 $ARGUMENTS の1つ目が計画ファイル（通常 direction 置き場の `*.md`）、2つ目が任意のタスクディレクトリ（省略時はカレント checkout で作業。worktree でも可）。
 

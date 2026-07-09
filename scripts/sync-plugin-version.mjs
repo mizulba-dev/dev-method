@@ -5,6 +5,10 @@ const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
 const manifests = [
   'src/plugin/.claude-plugin/plugin.json',
   'src/plugin/.codex-plugin/plugin.json',
+  'src/plugin-claude/.claude-plugin/plugin.json',
+  'src/plugin-claude/.codex-plugin/plugin.json',
+  'src/plugin-codex/.claude-plugin/plugin.json',
+  'src/plugin-codex/.codex-plugin/plugin.json',
 ];
 
 for (const path of manifests) {

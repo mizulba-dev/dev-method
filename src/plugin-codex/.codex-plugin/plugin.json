@@ -1,0 +1,12 @@
+{
+  "name": "dev-method-codex",
+  "displayName": "Dev Method (Codex)",
+  "description": "dev-method の Codex 専用部分 — multi_agent サブエージェント（implementer）によるチーム実装（team-impl）。共通スキルは dev-method 本体に。Claude Code にはインストール不要",
+  "version": "0.1.0",
+  "interface": {
+    "displayName": "Dev Method (Codex)",
+    "developerName": "mizulba",
+    "shortDescription": "Codex サブエージェントによるチーム実装スキル",
+    "longDescription": "dev-method の Codex 専用部分 — multi_agent サブエージェント（implementer）によるチーム実装。Claude Code にはインストール不要"
+  }
+}

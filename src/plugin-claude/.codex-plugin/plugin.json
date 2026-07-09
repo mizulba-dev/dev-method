@@ -1,0 +1,12 @@
+{
+  "name": "dev-method-claude",
+  "displayName": "Dev Method (Claude Code)",
+  "description": "dev-method の Claude Code 専用部分。Codex にはインストール不要（Codex は dev-method-codex を使う）",
+  "version": "0.1.0",
+  "interface": {
+    "displayName": "Dev Method (Claude Code)",
+    "developerName": "mizulba",
+    "shortDescription": "Claude Code 専用のチーム実装スキル",
+    "longDescription": "dev-method の Claude Code 専用部分。Codex にはインストール不要（Codex は dev-method-codex を使う）"
+  }
+}

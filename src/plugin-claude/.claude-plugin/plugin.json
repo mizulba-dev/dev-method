@@ -1,0 +1,11 @@
+{
+  "name": "dev-method-claude",
+  "displayName": "Dev Method (Claude Code)",
+  "description": "dev-method の Claude Code 専用部分 — implementer teammate によるチーム実装（team-impl）。共通スキルは dev-method 本体に。Codex にはインストール不要",
+  "version": "0.1.0",
+  "author": {
+    "name": "mizulba"
+  },
+  "repository": "https://github.com/mizulba-dev/dev-method",
+  "license": "UNLICENSED"
+}

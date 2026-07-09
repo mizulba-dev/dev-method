@@ -11,7 +11,19 @@
       "name": "dev-method",
       "displayName": "Dev Method",
       "source": "./src/plugin",
-      "description": "個人開発手法プラグイン — direction 計画駆動・クロスモデルレビュー・チーム実装を、どのプロジェクトでも共有リポジトリを汚さずに回す"
+      "description": "個人開発手法の共通スキル（direction / cross-review）。Claude Code / Codex 両対応"
+    },
+    {
+      "name": "dev-method-claude",
+      "displayName": "Dev Method (Claude Code)",
+      "source": "./src/plugin-claude",
+      "description": "Claude Code 専用のチーム実装（team-impl + implementer teammate）。Claude Code のみインストール"
+    },
+    {
+      "name": "dev-method-codex",
+      "displayName": "Dev Method (Codex)",
+      "source": "./src/plugin-codex",
+      "description": "Codex 専用のチーム実装（team-impl + implementer サブエージェント）。Codex のみインストール"
     }
   ]
 }
