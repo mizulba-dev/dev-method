@@ -4,7 +4,7 @@
 
 ## 構成の要点
 
-- 1リポジトリ・3プラグイン: `src/plugin`（共通: direction / cross-review）、`src/plugin-claude`（team-impl + implementer agent）、`src/plugin-codex`（team-impl + implementer.toml）。
+- 1リポジトリ・3プラグイン: `src/plugin`（共通: direction / cross-review / playwright-cli / sns）、`src/plugin-claude`（team-impl + implementer agent）、`src/plugin-codex`（team-impl + implementer.toml）。
 - 各プラグインは `.claude-plugin/plugin.json` と `.codex-plugin/plugin.json` の dual manifest。version は `npm version patch` で全6マニフェストに自動同期される（`scripts/sync-plugin-version.mjs`）。
 - Codex のエージェント定義（implementer.toml）はプラグインで配布できないため、Codex 版 team-impl スキルが初回実行時に `~/.codex/agents/` へコピーする方式。
 

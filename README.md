@@ -6,7 +6,7 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` / `playwright-cli` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `cross-review` / `playwright-cli` / `sns` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（implementer teammate 機構）+ `agents/implementer.md` | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（multi_agent サブエージェント）+ `implementer.toml` | Codex のみ |
 
@@ -14,6 +14,7 @@
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回に `~/.codex/agents/implementer.toml` を自動セットアップ）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
+- `sns` — build in public の素材採取（material）と投稿ドラフト作成（draft）。素材は `~/dev-notes/sns/materials.md` に出来事直後の解像度で1行採取し、作文は1素材=1投稿。公開は人間が行う
 
 plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。team-impl は各クライアントに自分用の1つだけが入るため名前衝突しない。
 
