@@ -19,7 +19,7 @@ plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:di
 
 ## プロジェクト側の宣言（任意）
 
-ゼロ設定で動く。例外プロジェクトのみルート CLAUDE.md / CLAUDE.local.md（untracked）に宣言する:
+ゼロ設定で動く。例外プロジェクトのみルート CLAUDE.md / CLAUDE.local.md（untracked）、または PaPut のプロジェクト指示（`paput_get_project_context` の instructions。ローカルファイルを増やさずに済む）に宣言する:
 
 ```
 direction 置き場: <パス>          # 例: paput は repo 内 docs/direction を維持
@@ -50,9 +50,10 @@ codex plugin add dev-method-codex@mizulba-dev
 
 ## 未検証ポイント
 
-- Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐）
-- Codex 版 team-impl のサブエージェント運用（スレッド差し戻し・並列スポーン・agents 定義の反映タイミング）。初回実行で実測してスキルを実態に合わせる
+- Codex 版 team-impl のスレッド差し戻し・並列スポーンの安定性・agents 定義の反映タイミング
 
 ## 検証済み
 
 - Codex の plugin ローダーは `agents/` ディレクトリを無視する（2026-07 実測。公式 plugin はすべて skills/ + assets/ のみ）。Codex のエージェント定義は plugin では配布できず `~/.codex/agents/*.toml` 固定のため、Codex 版 team-impl はスキル初回実行時のコピーでセットアップする
+- Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐。2026-07-09 初回運用で実測、オプション形式の調整後に動作）
+- Codex 版 team-impl の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
