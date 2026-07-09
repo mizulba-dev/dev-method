@@ -44,5 +44,8 @@ codex plugin add dev-method@dev-method
 
 ## 未検証ポイント
 
-- Codex の plugin ローダーが `agents/` ディレクトリを無視するか（paput plugin に前例なし）
 - Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐）
+
+## 検証済み
+
+- Codex の plugin ローダーは `agents/` ディレクトリを無視する（2026-07 実測。公式 plugin はすべて skills/ + assets/ のみで、agents 概念なし。キャッシュに展開されるだけで無害なため、Claude 専用の implementer.md は分離せず同居させる）
