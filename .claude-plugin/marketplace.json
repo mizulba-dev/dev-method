@@ -1,0 +1,17 @@
+{
+  "name": "dev-method",
+  "owner": {
+    "name": "mizulba"
+  },
+  "metadata": {
+    "description": "Personal development-method plugin marketplace (private)"
+  },
+  "plugins": [
+    {
+      "name": "dev-method",
+      "displayName": "Dev Method",
+      "source": "./src/plugin",
+      "description": "個人開発手法プラグイン — direction 計画駆動・クロスモデルレビュー・チーム実装を、どのプロジェクトでも共有リポジトリを汚さずに回す"
+    }
+  ]
+}
