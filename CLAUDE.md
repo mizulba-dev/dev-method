@@ -1,6 +1,6 @@
-# CLAUDE.md
+# dev-method 開発ガイド
 
-個人開発手法プラグインのリポジトリ。構成・インストール・リリース手順の全体は README.md を参照。
+個人開発手法プラグインのリポジトリ。このファイルは CLAUDE.md が正本で、AGENTS.md は symlink（Claude Code / Codex 共通の指示）。構成・インストール・リリース手順の全体は README.md を参照。
 
 ## 構成の要点
 
