@@ -29,6 +29,7 @@ npx scenario-kit run <name>      # record + render in one step
 npx scenario-kit record <name>   # record only -> scenario-kit/out/recordings/<name>.webm
 npx scenario-kit render <name>   # convert + composite only -> scenario-kit/out/<name>-demo.mp4
 npx scenario-kit shots <name>    # capture PNG screenshots -> scenario-kit/out/shots/<name>/ (no video, no ffmpeg)
+npx scenario-kit qa <name>       # record + detect runtime issues -> scenario-kit/out/qa/<name>/{video.mp4,report.json,*.png}
 npx scenario-kit login [url]     # save a logged-in session for recording pages behind a login
 npx scenario-kit init            # scaffold scenario-kit/ in a new project
 npx scenario-kit --help          # full command and steps reference
@@ -49,18 +50,18 @@ A scenario is a JSON file in `scenario-kit/scenarios/` (e.g.
 `scenario-kit/scenarios/landing.json`) with a `steps` array. Each step is a
 single-key object:
 
-| step         | argument          | effect                                                                                         |
-| ------------ | ----------------- | ---------------------------------------------------------------------------------------------- |
-| `goto`       | url               | navigate to a URL                                                                              |
-| `click`      | locator           | click a Playwright locator                                                                     |
-| `type`       | `[locator, text]` | type text into a locator                                                                       |
-| `move`       | `[x, y]`          | move the mouse cursor                                                                          |
-| `scroll`     | y                 | smooth-scroll to a Y offset                                                                    |
-| `pause`      | ms                | wait                                                                                           |
-| `waitFor`    | locator           | wait for a locator to appear                                                                   |
-| `mark`       | label             | record a named timeline marker                                                                 |
-| `highlight`  | locator           | draw a red highlight box around a locator (`shots` only, no-op in `record`)                    |
-| `screenshot` | label             | capture the current viewport as a PNG, then clear highlights (`shots` only, no-op in `record`) |
+| step         | argument          | effect                                                                                              |
+| ------------ | ----------------- | --------------------------------------------------------------------------------------------------- |
+| `goto`       | url               | navigate to a URL                                                                                   |
+| `click`      | locator           | click a Playwright locator                                                                          |
+| `type`       | `[locator, text]` | type text into a locator                                                                            |
+| `move`       | `[x, y]`          | move the mouse cursor                                                                               |
+| `scroll`     | y                 | smooth-scroll to a Y offset                                                                         |
+| `pause`      | ms                | wait                                                                                                |
+| `waitFor`    | locator           | wait for a locator to appear                                                                        |
+| `mark`       | label             | record a named timeline marker                                                                      |
+| `highlight`  | locator           | draw a red highlight box around a locator (`shots` only, no-op in `record`/`qa`)                    |
+| `screenshot` | label             | capture the current viewport as a PNG, then clear highlights (`shots`/`qa` only, no-op in `record`) |
 
 `locator` is any Playwright locator string (e.g. `text=Get started`,
 `#hero`, `[data-testid=cta]`).
@@ -128,3 +129,36 @@ Output goes to `scenario-kit/out/shots/<name>/01-hero.png` (capture order,
 numbered), and the directory is wiped and recreated on each run.
 `highlight`/`screenshot` are no-ops during `record`, so the same scenario
 file can drive both the demo video and release-note screenshots.
+
+## QA workflow
+
+After implementing or changing a feature, use `npx scenario-kit qa <name>` as
+the last check before handing off to a human: it drives the real UI like
+`record` (video + pseudo-cursor), but also watches the page for runtime
+errors and writes a structured `report.json` instead of a branded video.
+
+1. Write (or reuse) a scenario in `scenario-kit/scenarios/<name>.json` (or
+   `.ts`) that exercises the feature end-to-end.
+2. Run `npx scenario-kit qa <name>`. It exits `0` when the scenario completed
+   with zero detected issues, `2` otherwise.
+3. If the exit code is non-zero, read
+   `scenario-kit/out/qa/<name>/report.json`:
+   - `failure` (non-null) means a step itself failed (e.g. a locator wasn't
+     found) — see `failure.stepIndex`/`message`/`screenshot`
+     (`failure.png`).
+   - `issues` is a list of runtime problems detected while driving the page:
+     `console-error`, `page-error` (uncaught exception), `http-error`
+     (status >= 400 on a document/xhr/fetch request), `request-failed`. Each
+     issue records the step index (JSON scenarios only), the most recent
+     `mark` label, and an `issue-N.png` screenshot when one was captured.
+   - Open the referenced screenshots (`failure.png` / `issue-N.png`) to see
+     the page state at the moment of the problem, fix the underlying code or
+     scenario, and re-run `qa` — repeat until it exits `0`.
+4. Once `qa` exits `0`, tell the human the video path
+   (`scenario-kit/out/qa/<name>/video.mp4`) so they can do a final skim —
+   `qa`'s job is to catch obvious breakage and runtime errors before that
+   point, not to replace a human glance at the result.
+
+`qa` does not do LLM-based visual judgment or pixel-diffing — it only
+surfaces deterministic signals (runtime errors, failed navigation/network
+requests, step failures) for an agent to act on.
