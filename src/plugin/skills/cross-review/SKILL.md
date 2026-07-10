@@ -10,8 +10,8 @@ $ARGUMENTS の1つ目が対象リポジトリの絶対パス。2つ目以降は�
 
 レビュアーは**実行中のクライアントとは別のモデル CLI** を選ぶ:
 
-- Claude Code 上で実行中 → `codex exec --cd <対象リポジトリ> --sandbox read-only "<プロンプト>"`
-- Codex 上で実行中 → `cd <対象リポジトリ> && claude -p --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(git log:*)" "<プロンプト>"`
+- Claude Code 上で実行中 → `codex exec --cd <対象リポジトリ> --sandbox read-only -m gpt-5.6 -c 'model_reasoning_effort="high"' "<プロンプト>"`
+- Codex 上で実行中 → `cd <対象リポジトリ> && claude -p "<プロンプト>" --model opus --effort high --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(git log:*)"`
 
 レビュアーはレビューだけを行い、コードは修正しない（read-only sandbox / allowedTools 制限で強制）。レビュアーを teammate として挟まず、リーダーが直接 CLI を起動する2層構成。
 
