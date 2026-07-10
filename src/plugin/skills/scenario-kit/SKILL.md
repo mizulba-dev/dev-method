@@ -18,7 +18,8 @@ scenario-kit/
   config.json      brand + output settings
   scenarios/
     <name>.json    one or more recording scenarios
-  out/             generated recordings and mp4s (gitignored)
+  assets/          brand assets such as logo.png (referenced from config.json)
+  out/             generated recordings, screenshots and mp4s (gitignored)
 ```
 
 ## Commands
@@ -27,6 +28,7 @@ scenario-kit/
 npx scenario-kit run <name>      # record + render in one step
 npx scenario-kit record <name>   # record only -> scenario-kit/out/recordings/<name>.webm
 npx scenario-kit render <name>   # convert + composite only -> scenario-kit/out/<name>-demo.mp4
+npx scenario-kit shots <name>    # capture PNG screenshots -> scenario-kit/out/shots/<name>/ (no video, no ffmpeg)
 npx scenario-kit login [url]     # save a logged-in session for recording pages behind a login
 npx scenario-kit init            # scaffold scenario-kit/ in a new project
 npx scenario-kit --help          # full command and steps reference
@@ -47,16 +49,18 @@ A scenario is a JSON file in `scenario-kit/scenarios/` (e.g.
 `scenario-kit/scenarios/landing.json`) with a `steps` array. Each step is a
 single-key object:
 
-| step      | argument          | effect                         |
-| --------- | ----------------- | ------------------------------ |
-| `goto`    | url               | navigate to a URL              |
-| `click`   | locator           | click a Playwright locator     |
-| `type`    | `[locator, text]` | type text into a locator       |
-| `move`    | `[x, y]`          | move the mouse cursor          |
-| `scroll`  | y                 | smooth-scroll to a Y offset    |
-| `pause`   | ms                | wait                           |
-| `waitFor` | locator           | wait for a locator to appear   |
-| `mark`    | label             | record a named timeline marker |
+| step         | argument          | effect                                                                                         |
+| ------------ | ----------------- | ---------------------------------------------------------------------------------------------- |
+| `goto`       | url               | navigate to a URL                                                                              |
+| `click`      | locator           | click a Playwright locator                                                                     |
+| `type`       | `[locator, text]` | type text into a locator                                                                       |
+| `move`       | `[x, y]`          | move the mouse cursor                                                                          |
+| `scroll`     | y                 | smooth-scroll to a Y offset                                                                    |
+| `pause`      | ms                | wait                                                                                           |
+| `waitFor`    | locator           | wait for a locator to appear                                                                   |
+| `mark`       | label             | record a named timeline marker                                                                 |
+| `highlight`  | locator           | draw a red highlight box around a locator (`shots` only, no-op in `record`)                    |
+| `screenshot` | label             | capture the current viewport as a PNG, then clear highlights (`shots` only, no-op in `record`) |
 
 `locator` is any Playwright locator string (e.g. `text=Get started`,
 `#hero`, `[data-testid=cta]`).
@@ -106,3 +110,21 @@ export default defineScenario(async ({ page, mark }) => {
   mark("hero");
 });
 ```
+
+## Screenshots
+
+`npx scenario-kit shots <name>` runs the same scenario but captures PNG
+screenshots instead of a video — no `ffmpeg`/Remotion, no pseudo-cursor. Add
+`highlight` (red box around a locator) and `screenshot` (capture + clear
+highlights) steps to a scenario to produce annotated screenshots for release
+notes or docs:
+
+```json
+{ "highlight": "text=Get started" },
+{ "screenshot": "hero" }
+```
+
+Output goes to `scenario-kit/out/shots/<name>/01-hero.png` (capture order,
+numbered), and the directory is wiped and recreated on each run.
+`highlight`/`screenshot` are no-ops during `record`, so the same scenario
+file can drive both the demo video and release-note screenshots.
