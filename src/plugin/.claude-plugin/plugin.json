@@ -2,7 +2,7 @@
   "name": "dev-method",
   "displayName": "Dev Method",
   "description": "個人開発手法プラグイン — direction 計画駆動・クロスモデルレビュー・チーム実装を、どのプロジェクトでも共有リポジトリを汚さずに回す",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "author": {
     "name": "mizulba"
   },
