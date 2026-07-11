@@ -2,7 +2,7 @@
   "name": "dev-method-claude",
   "displayName": "Dev Method (Claude Code)",
   "description": "dev-method の Claude Code 専用部分。Codex にはインストール不要（Codex は dev-method-codex を使う）",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "interface": {
     "displayName": "Dev Method (Claude Code)",
     "developerName": "mizulba",
