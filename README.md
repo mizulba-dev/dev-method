@@ -13,7 +13,7 @@
 - `direction` — 実装計画のライフサイクル管理。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる。起動前に同ファミリー最上位モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の headless プレレビューで明白な指摘を潰し、R1 を軽くしてから回す
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける
-- `method-check` — 開発を回したセッションの時間内訳・運用摩擦の実測チェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
+- `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
 - `sns` — build in public の素材採取（material）と投稿ドラフト作成（draft）。素材は `~/dev-notes/sns/materials.md` に出来事直後の解像度で1行採取し、作文は1素材=1投稿。公開は人間が行う
 - `scenario-kit` — Playwright 録画と Remotion 合成によるプロダクトデモ動画の作成・更新。`npx scenario-kit` でシナリオを録画・レンダリングする
@@ -53,10 +53,12 @@ codex plugin add dev-method-codex@mizulba-dev
 
 ## 未検証ポイント
 
-- Codex 版 team-impl のスレッド差し戻し・並列スポーンの安定性・agents 定義の反映タイミング
+- Codex 版 team-impl の interrupt_agent 運用、並列スポーンの安定性、agents 定義の反映タイミング
 
 ## 検証済み
 
 - Codex の plugin ローダーは `agents/` ディレクトリを無視する（2026-07 実測。公式 plugin はすべて skills/ + assets/ のみ）。Codex のエージェント定義は plugin では配布できず `~/.codex/agents/*.toml` 固定のため、Codex 版 team-impl はスキル初回実行時と定義更新時のコピーでセットアップする
 - Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐。2026-07-09 初回運用で実測、オプション形式の調整後に動作）
 - Codex 版 team-impl の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
+- Codex 版 team-impl の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
+- Codex セッション JSONL の cwd・正常/中断ターン境界・ツール call/output・MCP 所要時間・累積トークン量の抽出（2026-07-11 実在ログで確認）
