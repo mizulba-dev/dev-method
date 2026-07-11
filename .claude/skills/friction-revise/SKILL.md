@@ -8,7 +8,7 @@ description: friction ログを精査して dev-method スキルへの改訂を1
 ## 入力
 
 - `~/dev-notes/dev-method/friction.md` の**未対応エントリ**（`（改訂済み …）` `（見送り …）` マークが無い行）
-- 補助: `~/dev-notes/*/direction/` の完了 direction の実測フッター（レビューR数・差し戻し数の恒常傾向は friction に上がらないためここで拾う）
+- 補助: `~/dev-notes/*/direction/` の完了 direction の実測フッター（レビューR数・差し戻し数の恒常傾向は friction に上がらないためここで拾う）。バッチのたびに R1 指摘件数と R 数の時系列推移を集計し、direction 改訂（検証設計・横断関心）の効果が出ているかを確認する
 
 ## 手順
 

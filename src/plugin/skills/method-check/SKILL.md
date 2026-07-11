@@ -21,8 +21,9 @@ jsonl は数百 KB〜数 MB あるため目視で読まず、scratchpad に集�
 1. 全イベントの timestamp（UTC 記録。報告はローカル時刻へ変換）と type を読む
 2. ツール実行時間は tool_use と tool_result を id で突合して算出する
 3. それ以外の連続イベント間ギャップを「直前のイベント種別＝何を待っていたか」で分類する: ユーザー応答待ち／LLM 生成／委譲エージェント・バックグラウンドタスク待ち
-4. system イベントの `turn_duration` を実働時間の検算に使う。`away_summary` などハーネスの周期処理はギャップ算入前に中身を確認し、待ち時間と混同しない
-5. queue-operation の enqueue 内容で「ユーザーの入力」と「task-notification / teammate-message」を区別する（後者はユーザー待ちではない）
+4. LLM 生成のうち**手法運用**（direction 起草・実測フッター/friction 記録・README 索引・ユーザー向け報告の生成）に当たる区間は分けて集計する。判定はその区間のツール対象ファイル（direction 置き場・friction.md 等）と出力内容で行う
+5. system イベントの `turn_duration` を実働時間の検算に使う。`away_summary` などハーネスの周期処理はギャップ算入前に中身を確認し、待ち時間と混同しない
+6. queue-operation の enqueue 内容で「ユーザーの入力」と「task-notification / teammate-message」を区別する（後者はユーザー待ちではない）
 
 ## 報告
 
