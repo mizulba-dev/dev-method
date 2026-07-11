@@ -35,11 +35,20 @@ npx scenario-kit init            # scaffold scenario-kit/ in a new project
 npx scenario-kit --help          # full command and steps reference
 ```
 
+If a command from this document is missing from `npx scenario-kit --help`
+output, the project has an older scenario-kit installed — run it with an
+explicit version (`npx -y scenario-kit@latest <command> <name>`) or update the
+dependency, instead of concluding the command doesn't exist.
+
 `login` opens a browser for the user to log in manually (it needs their input —
 tell them to log in and press Enter in the terminal), then saves a Playwright
 storageState file. Set `"storageState": ".auth/state.json"` in
 `scenario-kit/config.json` so recordings start already logged in. Never write
-login steps (credentials) into a scenario.
+login steps (credentials) into a scenario. The saved session is
+origin-scoped: a session saved against production does not log you into
+`localhost`. When a scenario targets a different origin (e.g. a local dev
+server), check the state file's cookie domains first, and if they don't
+cover the target, re-run `npx scenario-kit login <url>` against it.
 
 Requires `ffmpeg`/`ffprobe` on PATH, and `npx playwright install chromium`
 once per machine.
@@ -65,6 +74,12 @@ single-key object:
 
 `locator` is any Playwright locator string (e.g. `text=Get started`,
 `#hero`, `[data-testid=cta]`).
+
+Don't guess locators or expected texts — read them from the app source
+(element ids, `aria-label`s, i18n message files). `waitFor` with `text=`
+must match the rendered text exactly, including punctuation; a paraphrased
+message times out. Each wrong guess costs a full scenario run, so a minute
+in the source first is cheaper than iterating on failures.
 
 Example `scenario-kit/scenarios/landing.json`:
 
@@ -138,7 +153,10 @@ the last check before handing off to a human: it drives the real UI like
 errors and writes a structured `report.json` instead of a branded video.
 
 1. Write (or reuse) a scenario in `scenario-kit/scenarios/<name>.json` (or
-   `.ts`) that exercises the feature end-to-end.
+   `.ts`) that exercises the feature end-to-end. If the existing demo
+   scenarios target production, write a separate local variant (e.g.
+   `<name>-local.json`) pointing at the dev server instead of editing them —
+   and check the login note above if the origins differ.
 2. Run `npx scenario-kit qa <name>`. It exits `0` when the scenario completed
    with zero detected issues, `2` otherwise.
 3. If the exit code is non-zero, read
