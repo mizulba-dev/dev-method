@@ -15,14 +15,14 @@ $ARGUMENTS の1つ目が対象リポジトリの絶対パス。2つ目以降は�
 
 レビュアーはレビューだけを行い、コードは修正しない（read-only sandbox / allowedTools 制限で強制）。レビュアーを teammate として挟まず、リーダーが直接 CLI を起動する2層構成。
 
-## 前段: 同モデルのプレレビュー
+## 前段: 同ファミリー最上位モデルのプレレビュー
 
-cross-review 起動前に、実行中のクライアント自身の低コストレビューを1回かけ、明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）:
+cross-review 起動前に、実行中クライアントと**同じファミリーの最上位モデル**を headless で1回かけ、明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）:
 
-- Claude Code 上で実行中 → `/code-review`（effort medium）
-- Codex 上で実行中 → 自身のレビュー機能で diff をレビューする（read-only。コード修正はさせない）
+- Claude Code 上で実行中 → `cd <対象リポジトリ> && claude -p "<プロンプト>" --model opus --effort high --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(git log:*)"`
+- Codex 上で実行中 → `codex exec --cd <対象リポジトリ> --sandbox read-only -m gpt-5.6-sol -c 'model_reasoning_effort="high"' "<プロンプト>"`（`-m` 指定が 400 model not supported になるアカウントでは `-m` を外す）
 
-指摘の処理は呼び出し元のフローに従う（team-impl なら軽微はリーダー直修正・それ以外は implementer へ差し戻し）。プレレビューは前段フィルタに徹する: 同モデルレビューには盲点があるため、指摘ゼロでも cross-review は省略しない。
+実行の仕組み（出力先の絶対パス・バックグラウンド起動・`< /dev/null` の stdin リダイレクト）は手順2〜3と同じ。出力先は `.work/cross-review-<N>-pre.md`。プロンプトの観点も手順3と同じでよいが、確信度の高い指摘のみを重大度順で求める。指摘の処理は呼び出し元のフローに従う（team-impl なら軽微はリーダー直修正・それ以外は implementer へ差し戻し）。プレレビューは前段フィルタに徹する: 同ファミリーのレビューには盲点を共有する可能性があるため、指摘ゼロでも cross-review は省略しない。
 
 ## 手順
 

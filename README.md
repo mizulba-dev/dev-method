@@ -11,7 +11,7 @@
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク Sol/high）+ implementer 定義 | Codex のみ |
 
 - `direction` — 実装計画のライフサイクル管理。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）
-- `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる。起動前に同モデルの低コストプレレビューで明白な指摘を潰し、R1 を軽くしてから回す
+- `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる。起動前に同ファミリー最上位モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の headless プレレビューで明白な指摘を潰し、R1 を軽くしてから回す
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける
 - `method-check` — 開発を回したセッションの時間内訳・運用摩擦の実測チェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
