@@ -127,6 +127,50 @@ export default defineScenario(async ({ page, mark }) => {
 });
 ```
 
+## macOS app scenarios (desktop apps, e.g. Claude Desktop)
+
+`record`/`render`/`run` can also drive a native macOS app instead of a
+browser — `shots`/`qa` reject app scenarios (not supported yet). Add a
+top-level `app` key naming the app (as used by `open -a` / System Events)
+instead of `page`/browser-based steps:
+
+```json
+{
+  "app": { "name": "Claude", "width": 1440, "height": 900 },
+  "steps": [
+    { "keystroke": "cmd+n" },
+    { "type": "こんにちは、今日の天気は？" },
+    { "keystroke": "enter" },
+    { "pause": 3000 },
+    { "mark": "reply" }
+  ]
+}
+```
+
+`width`/`height` are the window size in points, default `1440x900`. App
+scenarios have their own, independent steps vocabulary (JSON only — no
+`.ts` escape hatch):
+
+| step        | argument  | effect                                                                                                                |
+| ----------- | --------- | --------------------------------------------------------------------------------------------------------------------- |
+| `keystroke` | `"cmd+n"` | modifiers (`cmd`/`shift`/`ctrl`/`opt`) joined with `+`, then `enter`/`esc`/`tab`/`space` or a single alphanumeric key |
+| `type`      | text      | type Unicode text into the focused element                                                                            |
+| `click`     | `[x, y]`  | move (eased) then click a window-relative point (pt)                                                                  |
+| `move`      | `[x, y]`  | move the cursor to a window-relative point (pt), no click                                                             |
+| `pause`     | ms        | wait                                                                                                                  |
+| `mark`      | label     | record a named timeline marker                                                                                        |
+
+Requires macOS, `ffmpeg` on `PATH`, and `cliclick` on `PATH`
+(`brew install cliclick`), plus Accessibility permission for the terminal
+app running `scenario-kit` (System Settings → Privacy & Security →
+Accessibility) — `record` preflights this and fails with instructions if
+missing. The first `ffmpeg` screen capture triggers macOS's screen-recording
+permission prompt (can't be preflighted), and that prompt shows up in the
+recording itself — run `record` once on a throwaway scenario first to grant
+the permission, then record for real. The composited video uses a bare
+window frame (no fake browser bar) since the real app window has its own
+title bar.
+
 ## Screenshots
 
 `npx scenario-kit shots <name>` runs the same scenario but captures PNG
