@@ -6,13 +6,15 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `sns` / `scenario-kit` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `cross-review` / `team-qa` / `create-qa-data-skill` / `method-check` / `playwright-cli` / `sns` / `scenario-kit` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer agents | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク Sol/high）+ implementer 定義 | Codex のみ |
 
 - `direction` — 実装計画のライフサイクル管理。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる。起動前に同ファミリー最上位モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の headless プレレビューで明白な指摘を潰し、R1 を軽くしてから回す
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける
+- `team-qa` — 完了済みdirectionを入力に、実装とは独立してQA観点の選定、データ準備、scenario-kit実走、証跡整理、`PASS | FAIL | BLOCKED | SKIPPED` 判定を行う。複数画面・権限差・状態遷移・回帰証跡が必要な変更で明示呼び出しし、微修正やUI非変更は人間確認・既存テストを選んでよい
+- `create-qa-data-skill` — 既存fixture・seed・API・テストヘルパー等を探索し、プロジェクト固有の安全な `prepare-qa-data` を `.agents/skills/` と `.claude/skills/` に生成する。`team-qa` は必要なデータ準備skillを暗黙生成せず、未整備なら `BLOCKED` として先にこのスキルの明示呼び出しを案内する
 - `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
 - `sns` — build in public の素材採取（material）と投稿ドラフト作成（draft）。素材は `~/dev-notes/sns/materials.md` に出来事直後の解像度で1行採取し、作文は1素材=1投稿。公開は人間が行う

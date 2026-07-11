@@ -224,3 +224,12 @@ errors and writes a structured `report.json` instead of a branded video.
 `qa` does not do LLM-based visual judgment or pixel-diffing — it only
 surfaces deterministic signals (runtime errors, failed navigation/network
 requests, step failures) for an agent to act on.
+
+When this skill is called from an independent QA flow such as `team-qa`, keep
+the QA verdict separate from implementation. You may create or update files
+under `scenario-kit/scenarios/`, but do not fix product code, create
+migrations, or alter shared data in response to a failure. Return the
+reproduction steps, expected and actual behavior, relevant `report.json`,
+screenshots and video, and likely impact to the caller. Have the implementation
+flow make the fix, then rerun the same scenario. A successful machine result
+still requires the caller to state whether a human video skim remains.
