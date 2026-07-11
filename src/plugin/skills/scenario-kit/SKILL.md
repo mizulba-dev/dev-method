@@ -1,6 +1,6 @@
 ---
 name: scenario-kit
-description: Record and regenerate this project's product demo video with scenario-kit (Playwright recording + Remotion compositing). Use when asked to create, update, or regenerate a demo video, or to add a new demo scenario.
+description: Drive this project's real UI with scenario-kit scenarios for three jobs - branded demo videos (run, Playwright recording + Remotion compositing), annotated PNG screenshots for release notes or docs (shots), and post-implementation QA that records a run while detecting runtime errors (qa). Use when asked to create, update, or regenerate a demo video, capture product screenshots, add a scenario, or verify a feature end-to-end in the browser after implementing or changing it.
 allowed-tools: Bash(npx scenario-kit:*)
 ---
 
