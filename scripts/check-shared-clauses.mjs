@@ -2,6 +2,54 @@ import { readFileSync } from 'node:fs';
 
 const CLAUSE_PAIRS = [
   {
+    id: '完了報告: リーダーへの明示配送契約（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /完了条件: 最終報告がリーダーへ明示的に届くまで.*/,
+  },
+  {
+    id: 'プレレビュー: 実行可能な検知器の証跡照合',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /実行可能な検知器（テスト基盤・検証スクリプト・パーサ・品質ゲート）の変更では、direction の検証設計.*/,
+  },
+  {
+    id: 'implementer: 故意ずれ検体の実行',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /計画の検証設計に故意ずれ検体があれば.*/,
+  },
+  {
+    id: 'implementer-high: 故意ずれ検体の実行',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /計画の検証設計に故意ずれ検体があれば.*/,
+  },
+  {
+    id: 'reviewer: 実行可能な検知器の証跡照合',
+    fileA: 'src/plugin-claude/agents/reviewer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    regex: /実行可能な検知器（テスト基盤・検証スクリプト・パーサ・品質ゲート）の変更では、起動指示.*/,
+  },
+  {
+    id: '完了報告: implementer の明示配送契約',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /完了条件: 最終報告がリーダーへ明示的に届くまで.*/,
+  },
+  {
+    id: '完了報告: implementer-high の明示配送契約',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /完了条件: 最終報告がリーダーへ明示的に届くまで.*/,
+  },
+  {
+    id: '完了報告: reviewer の明示配送契約',
+    fileA: 'src/plugin-claude/agents/reviewer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    regex: /完了条件: 最終報告がリーダーへ明示的に届くまで.*/,
+  },
+  {
     id: '報告様式: 最終報告は要点のみ',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',

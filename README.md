@@ -10,7 +10,7 @@
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 | Codex のみ |
 
-- `direction` — 実装計画のライフサイクル管理。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。direction を作らない小タスクでも完了後レビューは行うが、小規模かつ `implementer-high` 基準（DB migration・並行処理・認可・セキュリティ・境界間契約）に該当しなければプレレビュー収束で完了してよく、`cross-review` は省略できる
+- `direction` — 実装計画のライフサイクル管理。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。direction を作らない小タスクでも完了後レビューは行うが、小規模かつ `implementer-high` 基準（DB migration・並行処理・認可・セキュリティ・境界間契約）に該当せず、実行可能な検知器（テスト基盤・検証スクリプト・パーサ・品質ゲート）の新設・変更でもなければプレレビュー収束で完了してよく、`cross-review` は省略できる
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。must-fix / should-fix がゼロ（マージ可）になるまでループする
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。`cross-review` 起動前に同ファミリー最上位モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の専用 reviewer エージェント（Claude 上は teammate、Codex 上は spawn_agent）でプレレビューを行い、明白な指摘を潰して R1 を軽くしてから回す
 - `team-qa` — 完了済みdirectionを入力に、実装とは独立してQA観点の選定、データ準備、scenario-kit実走、証跡整理、`PASS | FAIL | BLOCKED | SKIPPED` 判定を行う。複数画面・権限差・状態遷移・回帰証跡が必要な変更で明示呼び出しし、微修正やUI非変更は人間確認・既存テストを選んでよい
