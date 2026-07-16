@@ -2,7 +2,7 @@
   "name": "dev-method-codex",
   "displayName": "Dev Method (Codex)",
   "description": "dev-method の Codex 専用部分。チーム実装と SubagentStop hook による終了通知を提供。Claude Code にはインストール不要（Claude Code は dev-method-claude を使う）",
-  "version": "0.1.33",
+  "version": "0.1.34",
   "author": {
     "name": "mizulba"
   },
