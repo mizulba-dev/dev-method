@@ -17,12 +17,12 @@ $ARGUMENTS の1つ目が対象リポジトリの絶対パス。2つ目以降は�
 
 ## 前段: 同ファミリー最上位モデルのプレレビュー
 
-cross-review 起動前に、実行中クライアントと**同じファミリーの最上位モデル**を headless でかけ、明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）:
+cross-review 起動前に、実行中クライアントと**同じファミリーの最上位モデル**のレビューエージェントで明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）。実装担当（implementer）とは別の read-only 専用エージェントを使い、外部 CLI のバックグラウンド起動・stdin リダイレクト・手動ポーリングは不要にする（完了はターン終了で自動通知される）:
 
-- Claude Code 上で実行中 → `cd <対象リポジトリ> && claude -p "<プロンプト>" --model opus --effort high --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(git log:*)"`
-- Codex 上で実行中 → `codex exec --cd <対象リポジトリ> --sandbox read-only -m gpt-5.6-sol -c 'model_reasoning_effort="high"' "<プロンプト>"`（`-m` 指定が 400 model not supported になるアカウントでは `-m` を外す）
+- Claude Code 上で実行中 → Agent tool で `subagent_type: "dev-method-claude:reviewer"`（model opus / effort high、`tools` で read-only 制限済み）を起動する
+- Codex 上で実行中 → `spawn_agent` で `reviewer` プロファイル（GPT-5.6 Sol / high）を起動し、`wait_agent` で完了を待つ。read-only 強制はプロンプト指示のみで sandbox レベルの強制は未検証: 書き込みが発生していないか diff で都度確認する
 
-実行の仕組み（出力先の絶対パス・バックグラウンド起動・`< /dev/null` の stdin リダイレクト）は手順2〜3と同じ。出力先は `.work/cross-review-<N>-pre.md`。プロンプトの観点も手順3と同じでよいが、確信度の高い指摘のみを重大度順で求める。指摘の処理は呼び出し元のフローに従う（team-impl なら軽微はリーダー直修正・それ以外は implementer へ差し戻し）。**プレレビューは must-fix / should-fix がゼロに収束するまで繰り返し、収束してから cross-review を起動する**（まだ修正未反映の診断結果に対して cross-review を走らせて無駄撃ちしない。nit のみになったらプレレビュー自体は打ち切ってよい）。プレレビューが指摘ゼロに収束しても cross-review は省略しない: 同ファミリーのレビューには盲点を共有する可能性があるため。
+spawn prompt に含める内容は手順3のプロンプト観点と同じでよいが、確信度の高い指摘のみを重大度順で求める。再レビュー時は前回ラウンドの指摘一覧・対応方針・修正ファイルを spawn prompt に含める。指摘の処理は呼び出し元のフローに従う（team-impl なら軽微はリーダー直修正・それ以外は implementer へ差し戻し）。**プレレビューは must-fix / should-fix がゼロに収束するまで繰り返し、収束してから cross-review を起動する**（まだ修正未反映の診断結果に対して cross-review を走らせて無駄撃ちしない。nit のみになったらプレレビュー自体は打ち切ってよい）。プレレビューが指摘ゼロに収束しても cross-review は省略しない: 同ファミリーのレビューには盲点を共有する可能性があるため。
 
 ## 手順
 
