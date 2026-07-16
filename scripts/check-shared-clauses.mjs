@@ -89,7 +89,7 @@ const CLAUSE_PAIRS = [
     id: '手順9: 実測フッターのテンプレート',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /実測: 担当.*/,
+    regex: /実測: レーンAsk \/ 担当.*/,
   },
   {
     id: '手順9: R1必須とQA未実施の注記',
