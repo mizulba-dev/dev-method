@@ -6,7 +6,7 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` / `team-qa` / `create-qa-data-skill` / `method-check` / `playwright-cli` / `sns` / `scenario-kit` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `cross-review` / `team-qa` / `create-qa-data-skill` / `method-check` / `playwright-cli` / `scenario-kit` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
@@ -18,7 +18,6 @@
 - `create-qa-data-skill` — 既存fixture・seed・API・テストヘルパー等を探索し、プロジェクト固有の安全な `prepare-qa-data` を `.agents/skills/` と `.claude/skills/` に生成する。`team-qa` は必要なデータ準備skillを暗黙生成せず、未整備なら `BLOCKED` として先にこのスキルの明示呼び出しを案内する
 - `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
-- `sns` — build in public の素材採取（material）と投稿ドラフト作成（draft）。素材は `~/dev-notes/sns/materials.md` に出来事直後の解像度で1行採取し、作文は1素材=1投稿。公開は人間が行う
 - `scenario-kit` — Playwright 録画と Remotion 合成によるプロダクトデモ動画の作成・更新。`npx scenario-kit` でシナリオを録画・レンダリングする
 
 plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。team-impl は各クライアントに自分用の1つだけが入るため名前衝突しない。
