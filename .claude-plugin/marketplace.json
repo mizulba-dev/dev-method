@@ -23,7 +23,7 @@
       "name": "dev-method-codex",
       "displayName": "Dev Method (Codex)",
       "source": "./src/plugin-codex",
-      "description": "Codex 専用のチーム実装（team-impl + implementer サブエージェント）。Codex のみインストール"
+      "description": "Codex 専用のチーム実装（team-impl + implementer サブエージェント）と SubagentStop 終了通知。Codex のみインストール"
     }
   ]
 }

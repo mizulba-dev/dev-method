@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SubagentStop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/hooks/subagent-stop-notify.mjs\"",
+            "commandWindows": "node \"%PLUGIN_ROOT%\\hooks\\subagent-stop-notify.mjs\"",
+            "timeout": 5,
+            "statusMessage": "サブエージェント終了通知を配信中"
+          }
+        ]
+      }
+    ]
+  }
+}
