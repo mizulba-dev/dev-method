@@ -15,14 +15,7 @@ $ARGUMENTS の1つ目が対象リポジトリの絶対パス。2つ目以降は�
 
 レビュアーはレビューだけを行い、コードは修正しない（read-only sandbox / allowedTools 制限で強制）。レビュアーを teammate として挟まず、リーダーが直接 CLI を起動する2層構成。
 
-## 前段: 同ファミリー最上位モデルのプレレビュー
-
-cross-review 起動前に、実行中クライアントと**同じファミリーの最上位モデル**のレビューエージェントで明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）。実装担当（implementer）とは別の read-only 専用エージェントを使い、外部 CLI のバックグラウンド起動・stdin リダイレクト・手動ポーリングは不要にする（完了はターン終了で自動通知される）:
-
-- Claude Code 上で実行中 → Agent tool で `subagent_type: "dev-method-claude:reviewer"`（model opus / effort high、`tools` で read-only 制限済み）を起動する
-- Codex 上で実行中 → `spawn_agent` で `reviewer` プロファイル（GPT-5.6 Sol / high）を起動し、`wait_agent` で完了を待つ。read-only 強制はプロンプト指示のみで sandbox レベルの強制は未検証: 書き込みが発生していないか diff で都度確認する
-
-spawn prompt に含める内容は手順3のプロンプト観点と同じでよいが、確信度の高い指摘のみを重大度順で求める。再レビュー時は前回ラウンドの指摘一覧・対応方針・修正ファイルを spawn prompt に含める。指摘の処理は呼び出し元のフローに従う（team-impl なら軽微はリーダー直修正・それ以外は implementer へ差し戻し）。**プレレビューは must-fix / should-fix がゼロに収束するまで繰り返し、収束してから cross-review を起動する**（まだ修正未反映の診断結果に対して cross-review を走らせて無駄撃ちしない。nit のみになったらプレレビュー自体は打ち切ってよい）。プレレビューが指摘ゼロに収束しても cross-review は省略しない: 同ファミリーのレビューには盲点を共有する可能性があるため。
+呼び出し元（team-impl 等）が cross-review 起動前に同ファミリー最上位モデルによるプレレビューを行う場合の手順は、呼び出し元のスキル（`team-impl` のプレレビュー節）を参照する。cross-review 自体は異ベンダーによる diff レビューの実行にのみ責務を持つ。
 
 ## 手順
 
