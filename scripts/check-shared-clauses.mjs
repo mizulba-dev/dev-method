@@ -50,6 +50,24 @@ const CLAUSE_PAIRS = [
     regex: /完了条件: 最終報告がリーダーへ明示的に届くまで.*/,
   },
   {
+    id: '進捗報告: implementer の中間進捗条項',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /進捗報告: 作業が15分を超える見込みなら.*/,
+  },
+  {
+    id: '進捗報告: implementer-high の中間進捗条項',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /進捗報告: 作業が15分を超える見込みなら.*/,
+  },
+  {
+    id: 'リーダー: 最終報告未達時の催促上限とフォールバック',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /最終報告が無いまま idle 通知・ターン終了を検知したら.*/,
+  },
+  {
     id: '報告様式: 最終報告は要点のみ',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',

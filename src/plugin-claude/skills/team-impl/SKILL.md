@@ -29,6 +29,8 @@ worktree 分離を使う場合、implementer を spawn する前に対象 worktr
 
 完了条件: 最終報告がリーダーへ明示的に届くまで完了扱いにしない。状態通知・idle 通知・ターン終了は最終報告の代替にしない。
 
+最終報告が無いまま idle 通知・ターン終了を検知したら、催促は1回だけ行う。それでも届かなければ diff と検証証跡を直接確認して工程を進め、逸脱として実測フッターに記録する。
+
 ## プレレビュー（同ファミリー最上位モデル）
 
 implementer の完了報告を受けたら、`cross-review` を起動する前に `reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model opus / effort high、`tools` で read-only 制限済み）で明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）。implementer / implementer-high とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる（外部 CLI のバックグラウンド起動・stdin リダイレクト・手動ポーリングは不要）。
