@@ -50,6 +50,24 @@ const CLAUSE_PAIRS = [
     regex: /完了条件: 最終報告がリーダーへ明示的に届くまで.*/,
   },
   {
+    id: 'implementer: 削除・rename の旧名残存 grep',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /削除・rename を含む変更では、旧名.*/,
+  },
+  {
+    id: 'implementer-high: 削除・rename の旧名残存 grep',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /削除・rename を含む変更では、旧名.*/,
+  },
+  {
+    id: 'reviewer: 削除・rename diff の全体走査',
+    fileA: 'src/plugin-claude/agents/reviewer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    regex: /削除・rename を含む diff では、残存参照の走査.*/,
+  },
+  {
     id: '進捗報告: implementer の中間進捗条項',
     fileA: 'src/plugin-claude/agents/implementer.md',
     fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',

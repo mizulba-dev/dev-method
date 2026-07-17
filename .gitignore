@@ -3,3 +3,4 @@ node_modules/
 .work/
 .claude/settings.local.json
 .codex/config.toml
+.playwright-cli/
