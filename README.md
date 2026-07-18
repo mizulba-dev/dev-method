@@ -6,7 +6,7 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` / `team-qa` / `create-qa-data-skill` / `method-check` / `playwright-cli` / `scenario-kit` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
@@ -14,11 +14,9 @@
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。must-fix / should-fix がゼロ（マージ可）になるまでループする
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。`cross-review` 起動前に同ファミリー最上位モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の専用 reviewer エージェント（Claude 上は teammate、Codex 上は spawn_agent）でプレレビューを行い、明白な指摘を潰して R1 を軽くしてから回す。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）
 - Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ終了通知を出す。実行中は既存の Active 表示で確認する
-- `team-qa` — 完了済みdirectionを入力に、実装とは独立してQA観点の選定、データ準備、scenario-kit実走、証跡整理、`PASS | FAIL | BLOCKED | SKIPPED` 判定を行う。複数画面・権限差・状態遷移・回帰証跡が必要な変更で明示呼び出しし、微修正やUI非変更は人間確認・既存テストを選んでよい
-- `create-qa-data-skill` — 既存fixture・seed・API・テストヘルパー等を探索し、プロジェクト固有の安全な `prepare-qa-data` を `.agents/skills/` と `.claude/skills/` に生成する。`team-qa` は必要なデータ準備skillを暗黙生成せず、未整備なら `BLOCKED` として先にこのスキルの明示呼び出しを案内する
 - `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
-- `scenario-kit` — Playwright 録画と Remotion 合成によるプロダクトデモ動画の作成・更新。`npx scenario-kit` でシナリオを録画・レンダリングする
+- `scenario-kit` — Playwright 録画を軸にした3用途ツール: ブランド付きデモ動画（`run`）、リリースノート・ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`。ランタイム異常検知＋証跡を残す）。1つのシナリオを3用途へ使い回すのが基本形で、接続先が異なる場合だけ `<name>-local.json` 等の変種に分ける
 
 plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。team-impl は各クライアントに自分用の1つだけが入るため名前衝突しない。
 
@@ -67,7 +65,7 @@ codex plugin add dev-method-codex@mizulba-dev
 実装・修正の依頼を受けたら、着手前にレーンを1行宣言してから作業する（判定の正本は dev-method の `direction` スキル）:
 
 - **Ship**（挙動に触れない: typo・docs・コメント・ログ文言・依存 patch 更新・自明な設定値変更）: 直接実装し、機械ゲート（lint・build・該当テスト）のみ。レビューなし
-- **Show**（数ファイル・±100行未満、高リスク基準*に触れず、検知器の新設・変更でもない）: 直接実装し、プレレビューを must-fix / should-fix ゼロまで。cross-review なし
+- **Show**（数ファイル・±100行未満、高リスク基準*に触れず、検知器の新設・変更でもない）: 直接実装し、プレレビューを must-fix / should-fix ゼロまで。cross-review なし。UI に見える変更を含み既存シナリオでカバーできるなら `scenario-kit smoke` を機械ゲートに加え、実測に `smoke <PASS|FAIL n件|対象外|未整備>` を記録する（新規シナリオが要るなら省略可で `未整備`、UI に見える変更が無ければ `対象外`）
 - **Ask**（それ以外、高リスク基準*、検知器の新設・変更）: `direction` スキルを起動して計画から
 - *高リスク基準 = DB migration・並行処理・認可・セキュリティ・境界間契約
 - 迷ったら重い側のレーンに倒す。ユーザーがレーンを明示指定したら判定を省略する

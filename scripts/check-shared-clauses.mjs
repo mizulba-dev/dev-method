@@ -128,7 +128,7 @@ const CLAUSE_PAIRS = [
     regex: /実測: レーンAsk \/ 担当.*/,
   },
   {
-    id: '手順9: R1必須とQA未実施の注記',
+    id: '手順9: R1必須とsmoke確定の注記',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
     regex: /R1 指摘件数は計画品質の直接指標として必ず含める.*/,

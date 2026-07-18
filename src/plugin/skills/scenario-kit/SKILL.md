@@ -1,6 +1,6 @@
 ---
 name: scenario-kit
-description: Drive this project's real UI with scenario-kit scenarios for three jobs - branded demo videos (run, Playwright recording + Remotion compositing), annotated PNG screenshots for release notes or docs (shots), and post-implementation QA that records a run while detecting runtime errors (qa). Use when asked to create, update, or regenerate a demo video, capture product screenshots, add a scenario, or verify a feature end-to-end in the browser after implementing or changing it.
+description: Drive this project's real UI with scenario-kit scenarios for three jobs - branded demo videos (run, Playwright recording + Remotion compositing), annotated PNG screenshots for release notes or docs (shots), and a post-implementation smoke pass that records a run while detecting runtime errors (smoke). Use when asked to create, update, or regenerate a demo video, capture product screenshots, add a scenario, or verify a feature end-to-end in the browser after implementing or changing it.
 allowed-tools: Bash(npx scenario-kit:*)
 ---
 
@@ -29,7 +29,7 @@ npx scenario-kit run <name>      # record + render in one step
 npx scenario-kit record <name>   # record only -> scenario-kit/out/recordings/<name>.webm
 npx scenario-kit render <name>   # convert + composite only -> scenario-kit/out/<name>-demo.mp4
 npx scenario-kit shots <name>    # capture PNG screenshots -> scenario-kit/out/shots/<name>/ (no video, no ffmpeg)
-npx scenario-kit qa <name>       # record + detect runtime issues -> scenario-kit/out/qa/<name>/{video.mp4,report.json,*.png}
+npx scenario-kit smoke <name>    # record + detect runtime issues -> scenario-kit/out/smoke/<name>/{video.mp4,report.json,*.png}
 npx scenario-kit login [url]     # save a logged-in session for recording pages behind a login
 npx scenario-kit init            # scaffold scenario-kit/ in a new project
 npx scenario-kit --help          # full command and steps reference
@@ -59,18 +59,18 @@ A scenario is a JSON file in `scenario-kit/scenarios/` (e.g.
 `scenario-kit/scenarios/landing.json`) with a `steps` array. Each step is a
 single-key object:
 
-| step         | argument          | effect                                                                                              |
-| ------------ | ----------------- | --------------------------------------------------------------------------------------------------- |
-| `goto`       | url               | navigate to a URL                                                                                   |
-| `click`      | locator           | click a Playwright locator                                                                          |
-| `type`       | `[locator, text]` | type text into a locator                                                                            |
-| `move`       | `[x, y]`          | move the mouse cursor                                                                               |
-| `scroll`     | y                 | smooth-scroll to a Y offset                                                                         |
-| `pause`      | ms                | wait                                                                                                |
-| `waitFor`    | locator           | wait for a locator to appear                                                                        |
-| `mark`       | label             | record a named timeline marker                                                                      |
-| `highlight`  | locator           | draw a red highlight box around a locator (`shots` only, no-op in `record`/`qa`)                    |
-| `screenshot` | label             | capture the current viewport as a PNG, then clear highlights (`shots`/`qa` only, no-op in `record`) |
+| step         | argument          | effect                                                                                                 |
+| ------------ | ----------------- | ------------------------------------------------------------------------------------------------------ |
+| `goto`       | url               | navigate to a URL                                                                                      |
+| `click`      | locator           | click a Playwright locator                                                                             |
+| `type`       | `[locator, text]` | type text into a locator                                                                               |
+| `move`       | `[x, y]`          | move the mouse cursor                                                                                  |
+| `scroll`     | y                 | smooth-scroll to a Y offset                                                                            |
+| `pause`      | ms                | wait                                                                                                   |
+| `waitFor`    | locator           | wait for a locator to appear                                                                           |
+| `mark`       | label             | record a named timeline marker                                                                         |
+| `highlight`  | locator           | draw a red highlight box around a locator (`shots` only, no-op in `record`/`smoke`)                    |
+| `screenshot` | label             | capture the current viewport as a PNG, then clear highlights (`shots`/`smoke` only, no-op in `record`) |
 
 `locator` is any Playwright locator string (e.g. `text=Get started`,
 `#hero`, `[data-testid=cta]`).
@@ -130,7 +130,7 @@ export default defineScenario(async ({ page, mark }) => {
 ## macOS app scenarios (desktop apps, e.g. Claude Desktop)
 
 `record`/`render`/`run` can also drive a native macOS app instead of a
-browser — `shots`/`qa` reject app scenarios (not supported yet). Add a
+browser — `shots`/`smoke` reject app scenarios (not supported yet). Add a
 top-level `app` key naming the app (as used by `open -a` / System Events)
 instead of `page`/browser-based steps:
 
@@ -189,22 +189,23 @@ numbered), and the directory is wiped and recreated on each run.
 `highlight`/`screenshot` are no-ops during `record`, so the same scenario
 file can drive both the demo video and release-note screenshots.
 
-## QA workflow
+## Smoke workflow
 
-After implementing or changing a feature, use `npx scenario-kit qa <name>` as
-the last check before handing off to a human: it drives the real UI like
+After implementing or changing a feature, use `npx scenario-kit smoke <name>`
+as the last check before handing off to a human: it drives the real UI like
 `record` (video + pseudo-cursor), but also watches the page for runtime
-errors and writes a structured `report.json` instead of a branded video.
+errors and writes a structured `report.json` instead of a branded video — a
+light verification pass that leaves reviewable evidence.
 
 1. Write (or reuse) a scenario in `scenario-kit/scenarios/<name>.json` (or
    `.ts`) that exercises the feature end-to-end. If the existing demo
    scenarios target production, write a separate local variant (e.g.
    `<name>-local.json`) pointing at the dev server instead of editing them —
    and check the login note above if the origins differ.
-2. Run `npx scenario-kit qa <name>`. It exits `0` when the scenario completed
-   with zero detected issues, `2` otherwise.
+2. Run `npx scenario-kit smoke <name>`. It exits `0` when the scenario
+   completed with zero detected issues, `2` otherwise.
 3. If the exit code is non-zero, read
-   `scenario-kit/out/qa/<name>/report.json`:
+   `scenario-kit/out/smoke/<name>/report.json`:
    - `failure` (non-null) means a step itself failed (e.g. a locator wasn't
      found) — see `failure.stepIndex`/`message`/`screenshot`
      (`failure.png`).
@@ -215,21 +216,29 @@ errors and writes a structured `report.json` instead of a branded video.
      `mark` label, and an `issue-N.png` screenshot when one was captured.
    - Open the referenced screenshots (`failure.png` / `issue-N.png`) to see
      the page state at the moment of the problem, fix the underlying code or
-     scenario, and re-run `qa` — repeat until it exits `0`.
-4. Once `qa` exits `0`, tell the human the video path
-   (`scenario-kit/out/qa/<name>/video.mp4`) so they can do a final skim —
-   `qa`'s job is to catch obvious breakage and runtime errors before that
+     scenario, and re-run `smoke` — repeat until it exits `0`.
+4. Once `smoke` exits `0`, tell the human the video path
+   (`scenario-kit/out/smoke/<name>/video.mp4`) so they can do a final skim —
+   `smoke`'s job is to catch obvious breakage and runtime errors before that
    point, not to replace a human glance at the result.
 
-`qa` does not do LLM-based visual judgment or pixel-diffing — it only
+`smoke` does not do LLM-based visual judgment or pixel-diffing — it only
 surfaces deterministic signals (runtime errors, failed navigation/network
 requests, step failures) for an agent to act on.
 
-When this skill is called from an independent QA flow such as `team-qa`, keep
-the QA verdict separate from implementation. You may create or update files
-under `scenario-kit/scenarios/`, but do not fix product code, create
-migrations, or alter shared data in response to a failure. Return the
-reproduction steps, expected and actual behavior, relevant `report.json`,
-screenshots and video, and likely impact to the caller. Have the implementation
-flow make the fix, then rerun the same scenario. A successful machine result
-still requires the caller to state whether a human video skim remains.
+## Usage split and reuse (dev-method-specific)
+
+After implementing or changing a UI-visible feature, write (or reuse) a
+scenario for `smoke` first — it is the cheapest entry point (record +
+runtime-error detection) and produces reviewable evidence. The same scenario
+then carries over to the other two jobs: `run` renders it into a branded demo
+video, `shots` captures annotated screenshots for release notes or docs. When
+a demo/shots pass needs a different origin than the smoke pass (e.g.
+production vs. local dev), keep them as separate `<name>-local.json`
+variants instead of editing the original — see the `login` note above.
+
+Choose between `playwright-cli` and `scenario-kit` by whether the result
+should persist as an artifact: a one-off look — debugging a page, poking at a
+locator to see if it resolves — belongs in `playwright-cli`. Anything meant
+to be re-run and kept — a demo video, release screenshots, or a smoke pass
+with reviewable evidence — belongs in a `scenario-kit` scenario.

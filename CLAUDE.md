@@ -14,3 +14,4 @@
 - スキル変更を手元の CLI に反映するときは `plugin-release` スキルを使う（リリース〜両 CLI 更新まで一気通貫）。
 - スキル本文は配布物。このリポジトリ固有の事情（パス・リモート等）はスキルに書かず、CLAUDE.md / README に書く。
 - Claude 版と Codex 版の team-impl は運用ルールを揃える。片方だけ直すと手法が分岐するので、変更時は両方を確認する。
+- `scenario-kit` スキル本文の正本は scenario-kit リポジトリ `src/templates/SKILL.md`。更新時は全文コピー→末尾の dev-method 固有節（使い分けと転用）を再適用する。

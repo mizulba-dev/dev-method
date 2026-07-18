@@ -21,8 +21,9 @@ function listDirectionFiles() {
 
 const FOOTER_LINE = /^[-*]?\s*実測:\s*(.+)$/;
 
-const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|差し戻し|リーダー直修正|追補\d|QA\s|逸脱:))/;
+const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|差し戻し|リーダー直修正|追補\d|QA\s|smoke\s|逸脱:))/;
 const QA_GRAMMAR = /^(PASS|FAIL \d+件|BLOCKED|SKIPPED|未実施)$/;
+const SMOKE_GRAMMAR = /^(PASS|FAIL \d+件|対象外|未整備)$/;
 
 function parseFooter(body) {
   const segments = body.split(FIELD_SPLIT).map((s) => s.trim());
@@ -34,6 +35,7 @@ function parseFooter(body) {
     addenda: null,
     addendaContracts: null,
     qa: null,
+    smoke: null,
     deviation: null,
   };
   for (const seg of segments) {
@@ -55,6 +57,7 @@ function parseFooter(body) {
       continue;
     }
     if ((m = seg.match(/^QA\s+(.+)$/))) { row.qa = m[1]; continue; }
+    if ((m = seg.match(/^smoke\s+(.+)$/))) { row.smoke = m[1]; continue; }
     if (/^逸脱:/.test(seg)) { row.deviation = seg.replace(/^逸脱:\s*/, '').trim(); continue; }
   }
   const warnings = [];
@@ -70,8 +73,21 @@ function parseFooter(body) {
   if (row.qa == null && /QA/.test(body)) {
     warnings.push('QA欄のパース失敗');
   }
+  if (row.smoke != null && !SMOKE_GRAMMAR.test(row.smoke)) {
+    warnings.push(`smoke値が文法外: ${row.smoke}`);
+  }
+  if (row.smoke == null && /smoke/.test(body)) {
+    warnings.push('smoke欄のパース失敗');
+  }
+  if (row.qa != null && row.smoke != null) {
+    warnings.push('QA欄とsmoke欄が同一フッターに両方存在');
+  }
 
-  row.qa = row.qa ?? '未実施';
+  // QA欄は旧形式（欄自体が無い過去directionを含む）の集計継続のためのデフォルト。
+  // smoke欄がある新形式のフッターでは、QA欄が無いことを「未実施」とは扱わない。
+  if (row.qa == null && row.smoke == null) {
+    row.qa = '未実施';
+  }
 
   return { row, warnings };
 }
@@ -105,7 +121,8 @@ function collectFooters(files) {
         差し戻し: row.reverts ?? '?',
         直修正: row.directFixes ?? '?',
         '追補(契約)': row.addenda != null ? `${row.addenda}(${row.addendaContracts ?? '?'})` : '?',
-        QA: row.qa,
+        'QA(旧)': row.qa ?? '—',
+        smoke: row.smoke ?? '—',
         逸脱有無: row.deviation && row.deviation !== 'なし' ? '有' : '無',
         location,
       });
@@ -146,15 +163,20 @@ function main() {
     for (const w of parseWarnings) console.log(`- ${w}`);
   }
 
-  const qaDone = rows.filter((r) => r.QA !== '未実施').length;
-  const qaFail = rows.filter((r) => /^FAIL/.test(r.QA)).length;
-  const qaRate = rows.length > 0 ? ((qaDone / rows.length) * 100).toFixed(1) : '0.0';
+  const smokeRows = rows.filter((r) => r.smoke !== '—' && SMOKE_GRAMMAR.test(r.smoke));
+  const smokeDone = smokeRows.filter((r) => r.smoke === 'PASS' || /^FAIL/.test(r.smoke)).length;
+  const smokeFail = smokeRows.filter((r) => /^FAIL/.test(r.smoke)).length;
+  const smokeUnready = smokeRows.filter((r) => r.smoke === '未整備').length;
+  const smokeExempt = smokeRows.filter((r) => r.smoke === '対象外').length;
+  const ratio = (n, d) => (d > 0 ? `${n}/${d} (${((n / d) * 100).toFixed(1)}%)` : '該当なし');
   const { count: qualityMissCount, exists: frictionExists } = countQualityMisses();
 
   console.log('\n集計:');
   console.log(`- 実測フッター件数: ${rows.length}`);
-  console.log(`- QA実施率: ${qaDone}/${rows.length} (${qaRate}%)`);
-  console.log(`- QA FAIL件数: ${qaFail}`);
+  console.log(`- smoke実施率: ${ratio(smokeDone, smokeRows.length)}（文法に合致する smoke欄を持つフッターが母数。文法外は警告に出し母数から除外、旧QA欄のみの過去directionは含まない）`);
+  console.log(`- smoke FAIL件数: ${smokeFail}`);
+  console.log(`- smoke未整備率: ${ratio(smokeUnready, smokeRows.length)}`);
+  console.log(`- smoke対象外率: ${ratio(smokeExempt, smokeRows.length)}（実施・未整備・対象外は同一母数の内訳）`);
   console.log(
     frictionExists
       ? `- friction.md 品質漏れエントリ件数: ${qualityMissCount}`
