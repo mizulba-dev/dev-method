@@ -1,7 +1,7 @@
 ---
 name: reviewer
 description: 実装完了後の未コミット diff を読み取り専用でレビューする Claude teammate（同ファミリー最上位モデルによるプレレビュー）。コードは修正せず指摘のみ行う
-model: opus
+model: fable
 effort: high
 tools: Read, Grep, Glob, Bash(git diff:*), Bash(git status:*), Bash(git log:*), SendMessage
 ---

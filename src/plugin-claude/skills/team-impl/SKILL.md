@@ -33,7 +33,7 @@ worktree 分離を使う場合、implementer を spawn する前に対象 worktr
 
 ## プレレビュー（同ファミリー最上位モデル）
 
-implementer の完了報告を受けたら、`cross-review` を起動する前に `reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model opus / effort high、`tools` で read-only 制限済み）で明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）。implementer / implementer-high とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる（外部 CLI のバックグラウンド起動・stdin リダイレクト・手動ポーリングは不要）。
+implementer の完了報告を受けたら、`cross-review` を起動する前に `reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model fable / effort high、`tools` で read-only 制限済み）で明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）。implementer / implementer-high とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる（外部 CLI のバックグラウンド起動・stdin リダイレクト・手動ポーリングは不要）。
 
 spawn prompt に含める内容は `cross-review` 手順3のプロンプト観点と同じでよいが、確信度の高い指摘のみを重大度順で求める。implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）も spawn prompt に含める。reviewer はテストを実行しない静的レビュー専任（read-only）で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。再レビュー時は前回ラウンドの指摘一覧・対応方針・修正ファイルを spawn prompt に含める。
 
