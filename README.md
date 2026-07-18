@@ -12,7 +12,7 @@
 
 - `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Ask）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。レーンは着手時に判定・宣言する: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（小規模かつ `implementer-high` 基準・検知器変更に非該当）はプレレビュー収束のみで `cross-review` 省略、Ask（本筋・高リスク・検知器変更）は direction 起草＋フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。must-fix / should-fix がゼロ（マージ可）になるまでループする
-- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。`cross-review` 起動前に同ファミリー最上位モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の専用 reviewer エージェント（Claude 上は teammate、Codex 上は spawn_agent）でプレレビューを行い、明白な指摘を潰して R1 を軽くしてから回す。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）
+- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。`cross-review` 起動前に同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer エージェント（Claude 上は teammate、Codex 上は spawn_agent）でプレレビューを行い、明白な指摘を潰して R1 を軽くしてから回す。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）
 - Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ終了通知を出す。実行中は既存の Active 表示で確認する
 - `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
@@ -28,9 +28,9 @@ plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:di
 | --- | --- | --- |
 | implementer（通常境界） | Sonnet/medium | GPT-5.6 Terra/medium |
 | implementer-high（高リスク境界） | Opus/high | GPT-5.6 Sol/high |
-| プレレビュー reviewer | Opus/high | GPT-5.6 Sol/high |
+| プレレビュー reviewer | Fable/high | GPT-5.6 Sol/high |
 
-`cross-review` は実行中のクライアントとは別モデルの CLI を呼ぶ: Codex 上で実行中なら Claude Opus/high を、Claude Code 上で実行中なら Codex の GPT-5.6 Sol/high を呼ぶ。
+`cross-review` は実行中のクライアントとは別モデルの CLI を呼ぶ: Codex 上で実行中なら Claude Fable/high を、Claude Code 上で実行中なら Codex の GPT-5.6 Sol/high を呼ぶ。
 
 ## プロジェクト側の宣言（任意）
 

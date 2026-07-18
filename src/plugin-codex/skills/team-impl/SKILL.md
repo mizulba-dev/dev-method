@@ -10,7 +10,7 @@ argument-hint: <計画ファイルのパス> [タスクディレクトリ]
 
 $ARGUMENTS の1つ目が計画ファイル（通常 direction 置き場の `*.md`）、2つ目が任意のタスクディレクトリ（省略時はカレント checkout で作業。worktree でも可）。
 
-実装は通常境界を `implementer`（GPT-5.6 Terra / medium）、高リスク境界を `implementer-high`（GPT-5.6 Sol / high）サブエージェントが行い、レビューは `cross-review` スキル（別モデル = Claude Opus / high の headless 実行・リーダー直叩き）で行う。実装・レビューとも中間ラッパー層を挟まない。
+実装は通常境界を `implementer`（GPT-5.6 Terra / medium）、高リスク境界を `implementer-high`（GPT-5.6 Sol / high）サブエージェントが行い、レビューは `cross-review` スキル（別モデル = Claude Fable / high の headless 実行・リーダー直叩き）で行う。実装・レビューとも中間ラッパー層を挟まない。
 
 ## 前提セットアップ（初回・定義更新時）
 

@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 const ROLE_MODELS = {
   implementer: { claude: 'sonnet/medium', codex: 'gpt-5.6-terra/medium' },
   'implementer-high': { claude: 'opus/high', codex: 'gpt-5.6-sol/high' },
-  reviewer: { claude: 'opus/high', codex: 'gpt-5.6-sol/high' },
-  'cross-review': { fromCodex: 'opus/high', fromClaude: 'gpt-5.6-sol/high' },
+  reviewer: { claude: 'fable/high', codex: 'gpt-5.6-sol/high' },
+  'cross-review': { fromCodex: 'fable/high', fromClaude: 'gpt-5.6-sol/high' },
 };
 
 function normalize(model, effort) {
