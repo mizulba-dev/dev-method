@@ -202,9 +202,21 @@ light verification pass that leaves reviewable evidence.
    scenarios target production, write a separate local variant (e.g.
    `<name>-local.json`) pointing at the dev server instead of editing them —
    and check the login note above if the origins differ.
-2. Run `npx scenario-kit smoke <name>`. It exits `0` when the scenario
-   completed with zero detected issues, `2` otherwise.
-3. If the exit code is non-zero, read
+2. Run `npx scenario-kit smoke <name>`. Its exit code and `report.json`
+   `status` agree: `0`/`pass` (completed with zero detected issues),
+   `2`/`fail` (a step failed or an issue was detected), `3`/`inconclusive`
+   (the run could not be evaluated for an environmental reason — _not_ an app
+   regression), or `1` for invalid usage (bad config/scenario name). One rare
+   exception: if the recorded video fails to convert to mp4, the run exits
+   `2` regardless of the report's `status`.
+3. If the status is `inconclusive` (exit `3`), the scenario never ran to a
+   verdict for an environmental reason: `ffmpeg`/`ffprobe` was missing, the
+   browser failed to launch, or the first navigation hit a connection-class
+   error before any page loaded (e.g. the dev server isn't up). The `reason`
+   field in `report.json` says which. Fix the environment (start the dev
+   server, install ffmpeg, ...) and re-run — do _not_ report it as a passing
+   or failing feature.
+4. If the status is `fail` (exit `2`), read
    `scenario-kit/out/smoke/<name>/report.json`:
    - `failure` (non-null) means a step itself failed (e.g. a locator wasn't
      found) — see `failure.stepIndex`/`message`/`screenshot`
@@ -217,7 +229,7 @@ light verification pass that leaves reviewable evidence.
    - Open the referenced screenshots (`failure.png` / `issue-N.png`) to see
      the page state at the moment of the problem, fix the underlying code or
      scenario, and re-run `smoke` — repeat until it exits `0`.
-4. Once `smoke` exits `0`, tell the human the video path
+5. Once `smoke` exits `0`, tell the human the video path
    (`scenario-kit/out/smoke/<name>/video.mp4`) so they can do a final skim —
    `smoke`'s job is to catch obvious breakage and runtime errors before that
    point, not to replace a human glance at the result.

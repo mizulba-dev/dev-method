@@ -23,7 +23,7 @@ const FOOTER_LINE = /^[-*]?\s*実測:\s*(.+)$/;
 
 const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|差し戻し|リーダー直修正|追補\d|QA\s|smoke\s|逸脱:))/;
 const QA_GRAMMAR = /^(PASS|FAIL \d+件|BLOCKED|SKIPPED|未実施)$/;
-const SMOKE_GRAMMAR = /^(PASS|FAIL \d+件|対象外|未整備)$/;
+const SMOKE_GRAMMAR = /^(PASS|FAIL \d+件|評価不能|対象外|未整備)$/;
 
 function parseFooter(body) {
   const segments = body.split(FIELD_SPLIT).map((s) => s.trim());
@@ -168,6 +168,7 @@ function main() {
   const smokeFail = smokeRows.filter((r) => /^FAIL/.test(r.smoke)).length;
   const smokeUnready = smokeRows.filter((r) => r.smoke === '未整備').length;
   const smokeExempt = smokeRows.filter((r) => r.smoke === '対象外').length;
+  const smokeInconclusive = smokeRows.filter((r) => r.smoke === '評価不能').length;
   const ratio = (n, d) => (d > 0 ? `${n}/${d} (${((n / d) * 100).toFixed(1)}%)` : '該当なし');
   const { count: qualityMissCount, exists: frictionExists } = countQualityMisses();
 
@@ -176,7 +177,8 @@ function main() {
   console.log(`- smoke実施率: ${ratio(smokeDone, smokeRows.length)}（文法に合致する smoke欄を持つフッターが母数。文法外は警告に出し母数から除外、旧QA欄のみの過去directionは含まない）`);
   console.log(`- smoke FAIL件数: ${smokeFail}`);
   console.log(`- smoke未整備率: ${ratio(smokeUnready, smokeRows.length)}`);
-  console.log(`- smoke対象外率: ${ratio(smokeExempt, smokeRows.length)}（実施・未整備・対象外は同一母数の内訳）`);
+  console.log(`- smoke評価不能率: ${ratio(smokeInconclusive, smokeRows.length)}（環境起因で評価が成立しなかった件数。実施率の分母には残るが実施扱いにはしない）`);
+  console.log(`- smoke対象外率: ${ratio(smokeExempt, smokeRows.length)}（実施・未整備・評価不能・対象外は同一母数の内訳）`);
   console.log(
     frictionExists
       ? `- friction.md 品質漏れエントリ件数: ${qualityMissCount}`
