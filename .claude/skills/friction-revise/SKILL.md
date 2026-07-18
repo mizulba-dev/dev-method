@@ -13,10 +13,11 @@ description: friction ログを精査して dev-method スキルへの改訂を1
 ## 手順
 
 1. 未対応エントリを同型でグルーピングする
-2. 各グループを該当スキルの該当セクションへ対応付ける（direction / team-impl / cross-review / その他）。スキルの問題でないもの（手順既記載の実行漏れ・単発の環境事故）は見送り候補にする
-3. 改訂案を1バッチで提示し、ユーザーと合意してから適用する
-4. 適用時のルール: team-impl は `src/plugin-claude` と `src/plugin-codex` の**両方を必ず揃える**。スキル本文にこのリポジトリ固有の事情を書かない（CLAUDE.md 参照）。実測フッターの文法を変える場合は `scripts/method-stats.mjs`・direction・team-impl 両版を同一バッチで揃える
-5. 複数スキルに並行条項（同文であるべき記載）を新設・変更する場合は、同バッチで全コピーを揃え、`scripts/check-shared-clauses.mjs` の対応表へ登録する。改訂バッチ3回ごとに、追加のみで肥大した節の統合・削除候補を棚卸しする
-6. friction.md の対応エントリ末尾に `（改訂済み YYYY-MM-DD）`、見送りは `（見送り YYYY-MM-DD 理由）` を付け、dev-notes をコミットする
-7. このリポジトリの変更を日本語メッセージでコミットし、手元 CLI へ配布するなら `plugin-release` スキルを提案する
-8. 確定した設計判断は `paput_add_project_document`（design_doc。却下・見送り判断も含める）へ保存する
+2. 過去に `（改訂済み）` マークが付いたエントリと同型の friction が未対応エントリに再発していないか確認する。再発していれば当該改訂は効いていないと判定し、再発エントリに前回改訂への参照を添えて今回バッチの対象へ含める（同じ文言の増補でなく、アプローチを変えて改訂し直す）。再発が無ければ前回改訂は維持と判定する
+3. 各グループを該当スキルの該当セクションへ対応付ける（direction / team-impl / cross-review / その他）。スキルの問題でないもの（手順既記載の実行漏れ・単発の環境事故）は見送り候補にする
+4. 改訂案を1バッチで提示し、ユーザーと合意してから適用する
+5. 適用時のルール: team-impl は `src/plugin-claude` と `src/plugin-codex` の**両方を必ず揃える**。スキル本文にこのリポジトリ固有の事情を書かない（CLAUDE.md 参照）。実測フッターの文法を変える場合は `scripts/method-stats.mjs`・direction・team-impl 両版を同一バッチで揃える
+6. 複数スキルに並行条項（同文であるべき記載）を新設・変更する場合は、同バッチで全コピーを揃え、`scripts/check-shared-clauses.mjs` の対応表へ登録する。改訂バッチ3回ごとに、追加のみで肥大した節の統合・削除候補を棚卸しする
+7. friction.md の対応エントリ末尾に `（改訂済み YYYY-MM-DD）`、見送りは `（見送り YYYY-MM-DD 理由）` を付け、dev-notes をコミットする
+8. このリポジトリの変更を日本語メッセージでコミットし、手元 CLI へ配布するなら `plugin-release` スキルを提案する
+9. 確定した設計判断は `paput_add_project_document`（design_doc。却下・見送り判断も含める）へ保存する

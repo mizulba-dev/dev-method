@@ -145,6 +145,42 @@ const CLAUSE_PAIRS = [
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
     regex: /品質優先のためラウンド数の上限は設けない/,
   },
+  {
+    id: 'reviewer: Pre-Report Gate（cross-review ↔ reviewer claude）',
+    fileA: 'src/plugin/skills/cross-review/SKILL.md',
+    fileB: 'src/plugin-claude/agents/reviewer.md',
+    regex: /報告前に各指摘へ4問を課す.*/,
+  },
+  {
+    id: 'reviewer: Pre-Report Gate（claude ↔ codex）',
+    fileA: 'src/plugin-claude/agents/reviewer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    regex: /報告前に各指摘へ4問を課す.*/,
+  },
+  {
+    id: 'reviewer: 偽陽性カタログ（cross-review ↔ reviewer claude）',
+    fileA: 'src/plugin/skills/cross-review/SKILL.md',
+    fileB: 'src/plugin-claude/agents/reviewer.md',
+    regex: /確信度の高い実際の問題のみ報告する.*?偽陽性の常連として原則書かない/,
+  },
+  {
+    id: 'reviewer: 偽陽性カタログ（claude ↔ codex）',
+    fileA: 'src/plugin-claude/agents/reviewer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    regex: /確信度の高い実際の問題のみ報告する.*/,
+  },
+  {
+    id: 'reviewer: テスト検知力の判定基準（cross-review ↔ reviewer claude）',
+    fileA: 'src/plugin/skills/cross-review/SKILL.md',
+    fileB: 'src/plugin-claude/agents/reviewer.md',
+    regex: /テスト不足はテストの存在でなく.*/,
+  },
+  {
+    id: 'reviewer: テスト検知力の判定基準（claude ↔ codex）',
+    fileA: 'src/plugin-claude/agents/reviewer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    regex: /テスト不足はテストの存在でなく.*/,
+  },
 ];
 
 function normalize(text) {
