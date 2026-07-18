@@ -8,6 +8,18 @@
 - 各プラグインは `.claude-plugin/plugin.json` と `.codex-plugin/plugin.json` の dual manifest。version は `npm version patch` で全6マニフェストに自動同期される（`scripts/sync-plugin-version.mjs`）。
 - Codex のエージェント定義（implementer*.toml）はプラグインで配布できないため、Codex 版 team-impl スキルが初回実行時と定義更新時に `~/.codex/agents/` へコピーする方式。
 
+## release プロファイル（plugin-release スキル用）
+
+- バンプ判断: 手法スキル・マニフェストの改訂は原則 patch
+- バージョン同期: `npm version patch` で全6マニフェスト（3プラグイン × claude/codex）が自動同期される（`scripts/sync-plugin-version.mjs`）
+- remote: SSH（git@github.com:mizulba-dev/dev-method.git）。https は認証に失敗する
+- push 前ゲート: なし（機械ゲートはコミット前に済ませる）
+- 配布チャネル: plugin-marketplace（marketplace: `mizulba-dev`）
+  - Claude Code: `dev-method@mizulba-dev`・`dev-method-claude@mizulba-dev`
+  - Codex: `dev-method@mizulba-dev`・`dev-method-codex@mizulba-dev`
+  - dev-method-claude は Codex に、dev-method-codex は Claude Code にインストールしない
+- 後続フック: なし
+
 ## ルール
 
 - 応答・コミットメッセージともに常に日本語。
