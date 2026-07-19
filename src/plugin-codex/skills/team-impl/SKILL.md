@@ -81,15 +81,8 @@ spawn 内容に含める指示は `cross-review` の `references/review-prompt.m
 
    `実測: レーンAsk / 担当<model/effort> / レビュー<model/effort・N>R（R1 must<N>+should<N>） / 差し戻し<N> / リーダー直修正<N> / 追補<N>（契約<N>） / smoke <PASS|FAIL n件|評価不能|対象外|未整備> / 逸脱: <スキル手順と実態がずれた点。無ければ「なし」>`
 
-   R1 指摘件数は計画品質の直接指標として必ず含める（収束経過として既に把握している数値の転記でよい）。smoke は direction 検証設計の定型観点で要否を決めているため、完了報告の時点で `PASS|FAIL n件|評価不能|対象外|未整備` のいずれかに確定させる。評価不能 = scenario-kit smoke の exit 3（環境起因で評価が成立しなかった場合。アプリ退行の FAIL と区別する）。
+   R1 指摘件数は計画品質の直接指標として必ず含める（収束経過として既に把握している数値の転記でよい）。smoke は direction 検証設計の定型観点で要否を決めているため、完了報告の時点でテンプレートのいずれかの値に確定させる（評価不能の定義は direction の実測フッター規定に準じる）。
 
 ## 完了条件
 
 対象リポジトリの CLAUDE.md / AGENTS.md に記載された検証コマンド（「実装完了条件」等。計画ファイルに完了条件があればそれを優先）を implementer が通し、検証証跡（実行コマンド・exit code・pass/fail 件数）を完了報告に含め、リーダーが証跡を確認していること。**検証実行は implementer の1回を正とし、リーダー・レビュアーは再実行しない**（差し戻し修正後の再検証も implementer が行う。例外は検知器変更時の異ベンダー独立実行検証のみ）。通っていない完了報告・証跡の無い完了報告は差し戻す。計画・リポジトリのどちらにも検証コマンドが無ければ、リーダーが変更内容に応じた検証コマンド（テスト・ビルド・lint 等）を決めて spawn 指示の完了条件に含める。
-
-## 実測状況
-
-- 検証済み（2026-07-09 初回運用）: `spawn_agent` / `wait_agent` による implementer 運用、cross-review の `claude -p` 実行
-- 検証済み（2026-07-11）: `fork_turns="none"` での独立 spawn、`send_message` / `followup_task` / `list_agents` による実装・差し戻し運用
-- 未検証: `interrupt_agent` の運用、並列スポーンの安定性、agents 定義の反映タイミング。実測時にズレがあればスキル側を実態に合わせて更新すること
-- 未検証（2026-07-16 追加）: `reviewer` プロファイルによるプレレビューの read-only 強制。`spawn_agent` に sandbox 相当の read-only 指定がなく、`developer_instructions` の禁止事項のみに依存している。実運用で書き込みが発生していないか diff で確認し、発生した場合はスキルの記載を見直す

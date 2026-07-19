@@ -31,7 +31,7 @@ $ARGUMENTS の1つ目が対象リポジトリの絶対パス。2つ目以降は�
      - exit 0 = 逸脱なし。exit 2 = 違反を検出（stdout の `violations` に列挙されたコマンド文字列を、denylist で検知した実行系コマンドの逸脱として実測フッターと friction ログに記録する。**ログに無い実行の自己申告は逸脱として記録しない**、ログが正）。exit 1 = ログ解釈不能（1回だけ再実行し、それでも解釈不能ならログを自由文として目視確認する）
      - `deniedAttempts`（allowedTools に拒否された試行。claude モードのみ）は正常動作であり、逸脱として記録しない。`otherCommands`（denylist に一致しない非 git コマンドの実行）も info 列挙のみで逸脱にしない
      - claude モードでは同時に結果 JSON が `<作業ディレクトリ>/cross-review-<N>.json` へ書き出される
-   - **結果の読み取り**: 結果 JSON を読み、severity で must-fix / should-fix を機械的に抽出して要約を報告する。team-impl 中なら must-fix / should-fix を implementer への差し戻しに使う。JSON が壊れている・スキーマ不適合の場合（主に claude 側。check-review-log.mjs が結果 JSON を書き出せなかった場合を含む）は1回だけ再実行し、それでも不適合なら出力を自由文として読み取り、逸脱として実測フッターと friction ログに記録する。verdict と findings の severity の整合（approve なのに must-fix / should-fix を含む場合）をリーダーが機械的に確認し、不整合はスキーマ不適合と同じ扱いで同経路に流す（1回だけ再実行し、それでも解消しなければ出力を自由文として読み取り、逸脱として実測フッターと friction ログに記録する）
+   - **結果の読み取り**: 結果 JSON を読み、severity で must-fix / should-fix を機械的に抽出して要約を報告する。team-impl 中なら must-fix / should-fix を implementer への差し戻しに使う。JSON が壊れている・スキーマ不適合の場合（主に claude 側。check-review-log.mjs が結果 JSON を書き出せなかった場合を含む）は1回だけ再実行し、それでも不適合なら出力を自由文として読み取り、逸脱として実測フッターと friction ログに記録する。verdict と findings の severity の整合（approve なのに must-fix / should-fix を含む場合）をリーダーが機械的に確認し、不整合はスキーマ不適合と同じ扱いで同経路に流す
    - **採否の裁定**: 指摘の採否・棄却に迷う場合、Claude Code 上でセッションに advisor が設定されていれば advisor に相談してから決める。相談してもなお偽陽性と示せない指摘は棄却せず must-fix / should-fix のまま残す（fail-closed。不確実性は棄却の根拠にしない）
    - **完了待機の方法**: 完了確認は実行環境の完了通知かブロッキング待機を必須とし、短間隔（秒単位）の手動ポーリングを繰り返さない。どちらも使えない環境でのみ手動確認とし、初回確認は diff 規模から見積もった実行時間（数分〜十数分）の経過後、以後も数分間隔を守る。60秒未満の poll を繰り返した場合は逸脱として実測フッターに記録する
 5. **must-fix / should-fix がゼロになるまでレビューを繰り返す**。以下の順で運用する:
