@@ -187,6 +187,12 @@ const CLAUSE_PAIRS = [
     fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
     regex: /nit はループの終了条件にせず.*?nit のためだけに追加ラウンドを起動しない）/,
   },
+  {
+    id: 'reviewer: 静的照合縮退の証跡欠落時の扱い（review-prompt ↔ reviewer claude）',
+    fileA: 'src/plugin/skills/cross-review/references/review-prompt.md',
+    fileB: 'src/plugin-claude/agents/reviewer.md',
+    regex: /実行証跡が無い失敗クラスは should-fix として報告し、自分の権限を広げて追加検証を実行しない/,
+  },
 ];
 
 function normalize(text) {
