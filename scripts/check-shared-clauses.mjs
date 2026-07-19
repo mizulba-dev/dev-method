@@ -147,7 +147,7 @@ const CLAUSE_PAIRS = [
   },
   {
     id: 'reviewer: Pre-Report Gate（cross-review ↔ reviewer claude）',
-    fileA: 'src/plugin/skills/cross-review/SKILL.md',
+    fileA: 'src/plugin/skills/cross-review/references/review-prompt.md',
     fileB: 'src/plugin-claude/agents/reviewer.md',
     regex: /報告前に各指摘へ4問を課す.*/,
   },
@@ -159,7 +159,7 @@ const CLAUSE_PAIRS = [
   },
   {
     id: 'reviewer: 偽陽性カタログ（cross-review ↔ reviewer claude）',
-    fileA: 'src/plugin/skills/cross-review/SKILL.md',
+    fileA: 'src/plugin/skills/cross-review/references/review-prompt.md',
     fileB: 'src/plugin-claude/agents/reviewer.md',
     regex: /確信度の高い実際の問題のみ報告する.*?偽陽性の常連として原則書かない/,
   },
@@ -171,7 +171,7 @@ const CLAUSE_PAIRS = [
   },
   {
     id: 'reviewer: テスト検知力の判定基準（cross-review ↔ reviewer claude）',
-    fileA: 'src/plugin/skills/cross-review/SKILL.md',
+    fileA: 'src/plugin/skills/cross-review/references/review-prompt.md',
     fileB: 'src/plugin-claude/agents/reviewer.md',
     regex: /テスト不足はテストの存在でなく.*/,
   },
@@ -180,6 +180,12 @@ const CLAUSE_PAIRS = [
     fileA: 'src/plugin-claude/agents/reviewer.md',
     fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
     regex: /テスト不足はテストの存在でなく.*/,
+  },
+  {
+    id: 'レビューループ: nit 運用（cross-review ↔ team-impl claude）',
+    fileA: 'src/plugin/skills/cross-review/SKILL.md',
+    fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    regex: /nit はループの終了条件にせず.*?nit のためだけに追加ラウンドを起動しない）/,
   },
 ];
 
