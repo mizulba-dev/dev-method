@@ -88,7 +88,7 @@ function splitOutsideQuotes(command, separators) {
 // 複合コマンド（例: git diff HEAD && go test ./...）を ; && || で独立ステートメントに分割し、
 // 各ステートメント内はさらに | でパイプ連鎖に分割する（いずれもクォート外のトークンのみで分割）。
 // パイプ連鎖の先頭は通常のコマンドとして判定し、2番目以降は read-only フィルタ
-// （head/tail/wc/grep/sort/awk/cut/uniq/sed/nl/jq/cat/tr）なら許可、
+// （head/tail/wc/grep/rg/sort/awk/cut/uniq/sed/nl/jq/cat/tr）なら許可、
 // それ以外（xargs/sh/tee 等の書込・実行系）は無条件で違反として扱う。
 function splitCommand(command) {
   const statements = splitOutsideQuotes(command, ["&&", "||", ";"]);
@@ -103,7 +103,7 @@ function splitCommand(command) {
   return { primaries, pipeFollowers };
 }
 
-const READ_ONLY_PIPE_FILTER = /^(head|tail|wc|grep|sort|awk|cut|uniq|sed|nl|jq|cat|tr)\b/;
+const READ_ONLY_PIPE_FILTER = /^(head|tail|wc|grep|rg|sort|awk|cut|uniq|sed|nl|jq|cat|tr)\b/;
 const GIT_PREFIX = /^git\b/;
 
 // denylist（検証・変更系コマンド）に一致する実行だけを違反とする。パイプ後段は read-only
