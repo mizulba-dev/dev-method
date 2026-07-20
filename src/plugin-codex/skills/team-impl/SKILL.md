@@ -14,8 +14,11 @@ $ARGUMENTS の1つ目が計画ファイル（通常 direction 置き場の `*.md
 
 ## 前提セットアップ（初回・定義更新時）
 
-1. `~/.codex/agents/implementer.toml`・`~/.codex/agents/implementer-high.toml`・`~/.codex/agents/reviewer.toml` が存在し、このスキルと同じディレクトリにある同名ファイルと一致するか確認する。無い、または内容が異なるファイルは `~/.codex/agents/` へコピーする。初回なら「agent 定義を作成した」、差分更新なら「agent 定義を更新した」と、反映にセッション再起動が必要な場合がある旨を添えて報告する。`spawn_agent` にプロファイル指定欄が無い環境では、定義の同期だけでは担当プロファイルを選択できない。その場合は、選択した担当の toml の developer_instructions 本文を spawn 指示の冒頭へ同梱して同等の役割制約を与える（モデル・effort の差は再現できないため、実測フッターの担当欄には実際のモデルを記す）。
-2. multi_agent 機能が無効な場合（サブエージェントをスポーンできない場合）はユーザーに有効化を依頼し、それまでは計画に沿った直列自己実装 + cross-review の縮退運用に切り替える。
+1. `~/.codex/agents/implementer.toml`・`~/.codex/agents/implementer-high.toml`・`~/.codex/agents/reviewer.toml` が存在し、このスキルと同じディレクトリにある同名ファイルと一致するか確認する。無い、または内容が異なるファイルは `~/.codex/agents/` へコピーする。初回なら「agent 定義を作成した」、差分更新なら「agent 定義を更新した」と報告する。
+2. 現セッションの `spawn_agent` tool schema を確認する。`agent_type` field があり、選択した正式 role 名が利用可能 role に見える場合は、role TOML の選択経路を使う。初回作成・role 名変更の場合は spawn 前に停止し、Codex の完全再起動を案内する。`agent_type` field はあるが選択 role が利用可能 role に見えない場合も spawn 前に停止し、完全再起動または定義修正を案内する。同名 role の本文だけを更新し、schema にその role が見えている場合は続行できる。
+3. `agent_type` field が無い環境では、3 role 定義がセッション開始前から同期済みだった場合に限り、未対応 runtime として選択 role TOML の `developer_instructions` 本文を spawn 指示の冒頭へ同梱する。この縮退では role のモデル・effort は適用されず親モデルを継承するため、「モデル配分不成立」と明示し、実測フッターの担当欄に実際の model / effort を記録する。現セッションで定義を新規作成・rename した場合は縮退せず、Codex の完全再起動を案内して停止する。
+4. `agent_type` を指定した spawn が unknown role または role 適用エラーになった場合は、担当本文の同梱へ縮退再試行せず停止し、完全再起動または定義修正を求める。能力判定は現在の tool schema を正とし、CLI のバージョンや feature 表示だけで分岐しない。
+5. multi_agent 機能が無効な場合（サブエージェントをスポーンできない場合）はユーザーに有効化を依頼し、それまでは計画に沿った直列自己実装 + cross-review の縮退運用に切り替える。
 
 ## 並列境界の解決
 
@@ -51,7 +54,7 @@ agent の状態と目的に応じて操作を使い分ける:
 
 ## プレレビュー（同ファミリー最上位モデル）
 
-サブエージェントの完了報告を受けたら、`cross-review` を起動する前に `reviewer` プロファイル（GPT-5.6 Sol / high）を `spawn_agent` で起動し、`wait_agent` で完了を待って明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）。read-only 強制はプロンプト指示のみで sandbox レベルの強制は未検証: 書き込みが発生していないか diff で都度確認する。
+サブエージェントの完了報告を受けたら、`cross-review` を起動する前に `reviewer` プロファイル（GPT-5.6 Sol / high）を前提セットアップの capability 分岐に従って `spawn_agent` で起動する。対応 runtime では `agent_type="reviewer"`・`fork_turns="none"` を指定し、`model` / `reasoning_effort` は重複指定せず reviewer TOML を正本にする。`agent_type` field が無い事前同期済み runtime では、`agent_type` を渡さず reviewer TOML の `developer_instructions` を message 冒頭へ同梱し、`fork_turns="none"` で起動する。`task_name` は `pre_review_1` / `pre_review_2` のような一意名にし、reviewer の role 選択子として扱わない。`wait_agent` で完了を待って明白な指摘を先に潰す（R1 の指摘件数とラウンド数を減らすため。効果は実測フッターの R1 件数で測る）。read-only 強制はプロンプト指示のみで sandbox レベルの強制は未検証: 書き込みが発生していないか diff で都度確認する。
 
 spawn 内容に含める指示は `cross-review` の `references/review-prompt.md` の観点ブロックと同じでよいが、確信度の高い指摘のみを重大度順で求める。implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）も spawn 内容に含める。reviewer はテストを実行しない静的レビュー専任で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。再レビュー時は前回ラウンドの指摘一覧・対応方針・修正ファイルを spawn 内容に含める。
 
@@ -70,8 +73,8 @@ spawn 内容に含める指示は `cross-review` の `references/review-prompt.m
 ## 手順
 
 1. 計画ファイルを読み、**並列境界別実装ブリーフ**（契約=確定値／変更マップ=触るファイルと模倣パターンの名指し／完了条件とやらないこと）が揃っているか確認する。欠けている境界があれば `direction` スキルの基準で計画側を補完してから着手する
-2. 実装タスクを境界単位に分割し、担当プロファイルを決める。DB migration・並行処理・認可・セキュリティ・複数境界の契約変更を含む境界は `implementer-high`、それ以外は `implementer` とする。単に変更量が多いだけでは high に上げない
-3. 決定した実装サブエージェントを境界単位に `spawn_agent` の `fork_turns="none"` で起動する。ブリーフを唯一の判断材料にして親会話の未確定案を混入させないため、既定の `fork_turns="all"` は使わない。ブリーフが揃っていれば最初から並列スポーンしてよい。spawn 指示には計画ファイルの絶対パス・対象リポジトリ（境界）・担当タスク一覧・完了条件を必ず含め、終了時の最終応答としてリーダーへ明示返却することも指示する。大きなフェーズは「追加系→削除系」のように**中間状態でもテストが通る単位**に分けて順に渡す
+2. 実装タスクを境界単位に分割し、担当 role を決める。DB migration・並行処理・認可・セキュリティ・複数境界の契約変更を含む境界は `implementer-high`、それ以外は `implementer` とする。単に変更量が多いだけでは high に上げない。ここで決めた正式 role 名を、手順3で対応 runtime の `agent_type` または未対応 runtime で本文を同梱する role TOML の選択へ伝播する
+3. 決定した実装サブエージェントを境界単位に、前提セットアップの capability 分岐に従って `spawn_agent` で起動する。対応 runtime では通常境界に `agent_type="implementer"`、高リスク境界に `agent_type="implementer-high"` を渡す。`agent_type` field が無い事前同期済み runtime では、`agent_type` を渡さず選択 role TOML の `developer_instructions` を message 冒頭へ同梱する。どちらの runtime でも `fork_turns="none"` を指定する。対応 runtime では `model` / `reasoning_effort` を重複指定せず、role TOML を正本にする。ブリーフを唯一の判断材料にして親会話の未確定案を混入させないため、既定の `fork_turns="all"` は使わない。`task_name` は `implementer_1` / `implementer_high_1` のような lowercase 英数字と underscore の一意な作業名に限定し、role 選択子として扱わない。ブリーフが揃っていれば最初から並列スポーンしてよい。spawn 指示には計画ファイルの絶対パス・対象リポジトリ（境界）・担当タスク一覧・完了条件を必ず含め、終了時の最終応答としてリーダーへ明示返却することも指示する。大きなフェーズは「追加系→削除系」のように**中間状態でもテストが通る単位**に分けて順に渡す
 4. 実装中に仕様追補が出たら、**境界間の契約を壊すもの（契約バグ）だけ `send_message` で即時に implementer へ反映**する。それ以外は direction に追補として記録し、実装完了後に `followup_task` でフォローアップ1バッチとしてまとめて回す（実装中の都度反映は手戻りが最も高くつく）
 5. サブエージェントの完了報告を受けたら、**プレレビュー**節に従って明白な指摘を潰し、must-fix / should-fix がゼロに収束してから `cross-review` スキルを対象リポジトリ＋計画ファイル指定でバックグラウンド起動する（別境界の実装と並行してよい）。direction に追補があれば追補箇所を**重点観点として必ず渡す**（追補は設計が揺れた箇所で、指摘の出どころになりやすい）。ブリーフに無い検証観点を思いついたときも、リーダーが自分で検証せず重点観点に足す
 6. レビュー実行中に並行して、リーダーが検証する: 完了報告の検証証跡（実行コマンド・exit code・pass/fail 件数）と diff の目視確認のみ行い、**完了条件コマンドの再実行はしない**。再実行は証跡が欠落している、または証跡と diff が矛盾する場合の抜き取り1回に限る。リーダー自身による追加の検証・補正の直列作業はしない（軽微の範囲を超える修正は implementer へ差し戻す）

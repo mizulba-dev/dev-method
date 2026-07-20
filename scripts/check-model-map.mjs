@@ -230,6 +230,57 @@ const PROSE_CHECKS = [
   },
 ];
 
+const ROUTING_CHECKS = [
+  {
+    description: 'implementer role が agent_type へ伝播する',
+    regex: /対応 runtime では通常境界に `agent_type="implementer"`/,
+  },
+  {
+    description: 'implementer-high role が agent_type へ伝播する',
+    regex: /高リスク境界に `agent_type="implementer-high"` を渡す/,
+  },
+  {
+    description: 'reviewer role が agent_type で選択される',
+    regex: /対応 runtime では `agent_type="reviewer"`・`fork_turns="none"` を指定/,
+  },
+  {
+    description: '実装 role 指定時に fork_turns=none を使う',
+    regex: /どちらの runtime でも `fork_turns="none"` を指定する/,
+  },
+  {
+    description: 'agent_type 非対応時は実装 role 本文を同梱して起動する',
+    regex: /`agent_type` field が無い事前同期済み runtime では、`agent_type` を渡さず選択 role TOML の `developer_instructions` を message 冒頭へ同梱する/,
+  },
+  {
+    description: 'agent_type 非対応時は reviewer 本文を同梱して起動する',
+    regex: /`agent_type` field が無い事前同期済み runtime では、`agent_type` を渡さず reviewer TOML の `developer_instructions` を message 冒頭へ同梱し、`fork_turns="none"` で起動する/,
+  },
+  {
+    description: 'task_name を role 選択子にしない',
+    regex: /`task_name` は `implementer_1` \/ `implementer_high_1` のような lowercase 英数字と underscore の一意な作業名に限定し、role 選択子として扱わない/,
+  },
+  {
+    description: 'reviewer task_name を一意名にして role 選択子にしない',
+    regex: /`task_name` は `pre_review_1` \/ `pre_review_2` のような一意名にし、reviewer の role 選択子として扱わない/,
+  },
+  {
+    description: '未対応 runtime の縮退を事前同期済み定義に限定する',
+    regex: /`agent_type` field が無い環境では、3 role 定義がセッション開始前から同期済みだった場合に限り、未対応 runtime として/,
+  },
+  {
+    description: 'agent_type 有・role 不可視なら spawn 前に停止する',
+    regex: /`agent_type` field はあるが選択 role が利用可能 role に見えない場合も spawn 前に停止し、完全再起動または定義修正を案内する/,
+  },
+  {
+    description: 'unknown role・role 適用エラー時に縮退再試行しない',
+    regex: /unknown role または role 適用エラーになった場合は、担当本文の同梱へ縮退再試行せず停止/,
+  },
+  {
+    description: 'role TOML を model / effort の正本にする',
+    regex: /対応 runtime では `model` \/ `reasoning_effort` を重複指定せず、role TOML を正本にする/,
+  },
+];
+
 function normalizeSlashPair(raw) {
   const m = raw.match(/^(.+?)\s*\/\s*(\S+)$/);
   if (!m) return null;
@@ -281,6 +332,15 @@ for (const check of PROSE_CHECKS) {
   if (actual !== expected) {
     mismatches.push(
       `${check.file}:${hit.line} ${check.role}/${check.variant} は "${actual}" だが割当表は "${expected}"`,
+    );
+  }
+}
+
+const codexTeamImpl = readFileSync('src/plugin-codex/skills/team-impl/SKILL.md', 'utf8');
+for (const check of ROUTING_CHECKS) {
+  if (!check.regex.test(codexTeamImpl)) {
+    mismatches.push(
+      `src/plugin-codex/skills/team-impl/SKILL.md: routing契約「${check.description}」が見つからない`,
     );
   }
 }

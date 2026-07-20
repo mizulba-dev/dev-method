@@ -22,6 +22,10 @@ const agentType =
   typeof input.agent_type === "string" && input.agent_type.length > 0
     ? input.agent_type
     : "subagent";
+const model =
+  typeof input.model === "string" && input.model.length > 0
+    ? input.model
+    : null;
 const agentId =
   typeof input.agent_id === "string" && input.agent_id.length > 0
     ? input.agent_id.slice(0, 8)
@@ -30,7 +34,7 @@ const agentId =
 process.stdout.write(
   JSON.stringify({
     continue: true,
-    systemMessage: `サブエージェント ${agentType}（${agentId}）が終了しました。結果は親スレッドへ配送されます。`,
+    systemMessage: `サブエージェント ${agentType}${model ? ` / ${model}` : ""}（${agentId}）が終了しました。結果は親スレッドへ配送されます。`,
     suppressOutput: false,
   }),
 );

@@ -12,8 +12,8 @@
 
 - `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Ask）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。レーンは着手時に判定・宣言する: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（小規模かつ `implementer-high` 基準・検知器変更に非該当）はプレレビュー収束のみで `cross-review` 省略、Ask（本筋・高リスク・検知器変更）は direction 起草＋フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。must-fix / should-fix がゼロ（マージ可）になるまでループする
-- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。`cross-review` 起動前に同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer エージェント（Claude 上は teammate、Codex 上は spawn_agent）でプレレビューを行い、明白な指摘を潰して R1 を軽くしてから回す。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）
-- Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ終了通知を出す。実行中は既存の Active 表示で確認する
+- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。Codex は現在の `spawn_agent` schema が対応していれば `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする。schema に `agent_type` が無い未対応 runtime では、セッション開始前から定義が同期済みの場合に限り役割本文を同梱して縮退し、モデル配分不成立（親モデル継承）を記録する。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。`cross-review` 起動前に同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer エージェント（Claude 上は teammate、Codex 上は `agent_type="reviewer"` の spawn_agent）でプレレビューを行い、明白な指摘を潰して R1 を軽くしてから回す。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）
+- Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ role と実行 model を含む終了通知を出す（model 欠損入力では role のみ）。実行中は既存の Active 表示で確認する
 - Claude Code の `SubagentStop` 報告ゲート hook — `implementer` / `implementer-high` / `reviewer` teammate の終了時、サブエージェント自身の transcript（`agent_transcript_path`）に `SendMessage` の tool_use が無ければ終了をブロックし、最終報告の送信を促す。再入時（`stop_hook_active`）はブロックしない。入力パース不能・transcript 不在時は fail-open（判定不能として続行）
 - `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
@@ -66,13 +66,13 @@ codex plugin add dev-method-codex@mizulba-dev
 実装・修正の依頼を受けたら、着手前にレーンを1行宣言してから作業する（判定の正本は dev-method の `direction` スキル）:
 
 - **Ship**（挙動に触れない: typo・docs・コメント・ログ文言・依存 patch 更新・自明な設定値変更）: 直接実装し、機械ゲート（lint・build・該当テスト）のみ。レビューなし
-- **Show**（数ファイル・±100行未満、高リスク基準*に触れず、検知器の新設・変更でもない）: 直接実装し、プレレビューを must-fix / should-fix ゼロまで。cross-review なし。UI に見える変更を含み既存シナリオでカバーできるなら `scenario-kit smoke` を機械ゲートに加え、実測に `smoke <PASS|FAIL n件|評価不能|対象外|未整備>` を記録する（新規シナリオが要るなら省略可で `未整備`、UI に見える変更が無ければ `対象外`）
+- **Show**（数ファイル・±100行未満、高リスク基準*に触れず、検知器の新設・変更でもない）: 直接実装し、プレレビューを must-fix / should-fix ゼロまで。Codex は現在の `spawn_agent` schema に `agent_type` があり `reviewer` が利用可能 role に見えれば `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` が無い環境では3 role 定義がセッション開始前から同期済みの場合に限り reviewer TOML の役割本文を同梱し、モデル配分不成立（親モデル継承）を記録する。role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更を含み既存シナリオでカバーできるなら `scenario-kit smoke` を機械ゲートに加え、実測に `smoke <PASS|FAIL n件|評価不能|対象外|未整備>` を記録する（新規シナリオが要るなら省略可で `未整備`、UI に見える変更が無ければ `対象外`）
 - **Ask**（それ以外、高リスク基準*、検知器の新設・変更）: `direction` スキルを起動して計画から
 - *高リスク基準 = DB migration・並行処理・認可・セキュリティ・境界間契約
 - 迷ったら重い側のレーンに倒す。ユーザーがレーンを明示指定したら判定を省略する
 ```
 
-Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` agent の spawn、Codex では `reviewer` プロファイルの spawn_agent で行う（team-impl のプレレビュー節に従う）。
+Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` agent の spawn、Codex では現在の tool schema が対応していれば `agent_type="reviewer"`・`fork_turns="none"` の spawn_agent で行う。schema に `agent_type` が無い場合の事前同期済み定義に限る縮退、role 不可視・適用失敗時の fail-closed は team-impl の前提セットアップと同じ契約に従う。
 
 ## リリース手順
 
@@ -94,6 +94,7 @@ Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` 
 - Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐。2026-07-09 初回運用で実測、オプション形式の調整後に動作）
 - Codex 版 team-impl の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
 - Codex 版 team-impl の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
+- Codex CLI `0.145.0-alpha.24` の custom role routing（2026-07-20実測）: `agent_type` + `fork_turns="none"` で implementer = GPT-5.6 Terra/medium、implementer-high = GPT-5.6 Sol/high、reviewer = GPT-5.6 Sol/high を選択し、implementer の follow-up でも同じ role / model / effort を維持。これは CLI alpha の確認であり、Codex Desktop / IDE の現セッションへの反映は現在の tool schema で別途判定する
 - Codex セッション JSONL の cwd・正常/中断ターン境界・ツール call/output・MCP 所要時間・累積トークン量の抽出（2026-07-11 実在ログで確認）
 - Claude Code の `SubagentStop` hook 入力 JSON のフィールド実名（2026-07-19 probe hook で実測）: `transcript_path` は**親セッション側**の transcript で、サブエージェント自身の transcript は別フィールド `agent_transcript_path`。再入フラグの実名は `stop_hook_active`。他に `agent_id` / `agent_type` / `session_id` / `cwd` / `hook_event_name` / `last_assistant_message` / `background_tasks` / `session_crons` を確認。実機確認として、SendMessage を使わず終了しようとする subagent が報告ゲート hook にブロックされ、Stop hook feedback を受けて SendMessage 送信後に終了するフローを実測
 - `claude -p --output-format stream-json` は `--verbose` を伴わないとエラーで即終了する（2026-07-19 実測）。tool_use は `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":...}}]}}` の形、最終結果は末尾の `{"type":"result","result":"<テキスト>",...}` イベントに入る
