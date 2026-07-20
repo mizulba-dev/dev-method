@@ -24,12 +24,25 @@ const FOOTER_LINE = /^[-*]?\s*実測:\s*(.+)$/;
 const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|差し戻し|リーダー直修正|追補\d|QA\s|smoke\s|逸脱:))/;
 const QA_GRAMMAR = /^(PASS|FAIL \d+件|BLOCKED|SKIPPED|未実施)$/;
 const SMOKE_GRAMMAR = /^(PASS|FAIL \d+件|評価不能|対象外|未整備)$/;
+const PARALLEL_REVIEW_GRAMMAR = /^レビュー並列(\d+)R・(\d+)分（R1 pre must(\d+)\+should(\d+)；cross must(\d+)\+should(\d+)；固有 pre(\d+)\+cross(\d+)；重複(\d+)）$/;
 
 function parseFooter(body) {
   const segments = body.split(FIELD_SPLIT).map((s) => s.trim());
   const row = {
+    lane: null,
     roundCount: null,
+    reviewMode: '旧形式',
+    reviewMinutes: null,
     r1: null,
+    preMust: null,
+    preShould: null,
+    crossMust: null,
+    crossShould: null,
+    uniquePre: null,
+    uniqueCross: null,
+    duplicate: null,
+    parallelValid: false,
+    parallelEligible: false,
     reverts: null,
     directFixes: null,
     addenda: null,
@@ -40,6 +53,45 @@ function parseFooter(body) {
   };
   for (const seg of segments) {
     let m;
+    if ((m = seg.match(/^レーン(\S+)$/))) {
+      row.lane = m[1];
+      continue;
+    }
+    if (/^レビュー並列/.test(seg)) {
+      row.reviewMode = '並列';
+      const full = seg.match(PARALLEL_REVIEW_GRAMMAR);
+      if (full) {
+        [
+          row.roundCount,
+          row.reviewMinutes,
+          row.preMust,
+          row.preShould,
+          row.crossMust,
+          row.crossShould,
+          row.uniquePre,
+          row.uniqueCross,
+          row.duplicate,
+        ] = full.slice(1).map(Number);
+        row.parallelValid = true;
+      } else {
+        if ((m = seg.match(/^レビュー並列(\d+)R/))) row.roundCount = Number(m[1]);
+        if ((m = seg.match(/R・(\d+)分/))) row.reviewMinutes = Number(m[1]);
+        if ((m = seg.match(/R1 pre must(\d+)\+should(\d+)/))) {
+          row.preMust = Number(m[1]);
+          row.preShould = Number(m[2]);
+        }
+        if ((m = seg.match(/cross must(\d+)\+should(\d+)/))) {
+          row.crossMust = Number(m[1]);
+          row.crossShould = Number(m[2]);
+        }
+        if ((m = seg.match(/固有 pre(\d+)\+cross(\d+)/))) {
+          row.uniquePre = Number(m[1]);
+          row.uniqueCross = Number(m[2]);
+        }
+        if ((m = seg.match(/重複(\d+)/))) row.duplicate = Number(m[1]);
+      }
+      continue;
+    }
     if (/^担当/.test(seg) || /^レビュー/.test(seg)) {
       const rMatches = [...seg.matchAll(/(\d+)R\b/g)].map((x) => Number(x[1]));
       if (rMatches.length > 0) {
@@ -66,7 +118,20 @@ function parseFooter(body) {
   if (row.directFixes == null) warnings.push('リーダー直修正数を抽出できず');
   if (row.addenda == null) warnings.push('追補数を抽出できず');
   if (row.deviation == null) warnings.push('逸脱欄を抽出できず');
-  if (!row.r1) warnings.push('R1内訳欠落');
+  if (row.reviewMode === '並列') {
+    if (row.reviewMinutes == null) warnings.push('並列レビュー分欠落');
+    if (row.preMust == null || row.preShould == null) warnings.push('並列pre R1内訳欠落');
+    if (row.crossMust == null || row.crossShould == null) warnings.push('並列cross R1内訳欠落');
+    if (row.uniquePre == null || row.uniqueCross == null) warnings.push('並列固有内訳欠落');
+    if (row.duplicate == null) warnings.push('並列重複数欠落');
+    if (!row.parallelValid) warnings.push('並列レビュー文法外（並列集計から除外）');
+    if (row.lane !== 'Ask') {
+      warnings.push(`並列レビューのレーン不一致: ${row.lane ?? '欠落'}（レーンAsk必須、並列集計から除外）`);
+    }
+    row.parallelEligible = row.parallelValid && row.lane === 'Ask';
+  } else if (!row.r1) {
+    warnings.push('R1内訳欠落');
+  }
   if (row.qa != null && !QA_GRAMMAR.test(row.qa)) {
     warnings.push(`QA値が文法外: ${row.qa}`);
   }
@@ -116,14 +181,33 @@ function collectFooters(files) {
       rows.push({
         日付: extractDate(file.name),
         プロジェクト: file.project,
+        レーン: row.lane ?? '?',
+        方式: row.reviewMode,
         R数: row.roundCount ?? '?',
-        'R1(must/should)': row.r1 ?? '欠落',
+        レビュー分: row.reviewMinutes ?? '—',
+        'R1(must/should)': row.r1 ?? '—',
+        'R1 pre': row.preMust != null ? `must${row.preMust}+should${row.preShould}` : '—',
+        'R1 cross': row.crossMust != null ? `must${row.crossMust}+should${row.crossShould}` : '—',
+        '固有(pre/cross)': row.uniquePre != null ? `${row.uniquePre}/${row.uniqueCross}` : '—',
+        重複: row.duplicate ?? '—',
         差し戻し: row.reverts ?? '?',
         直修正: row.directFixes ?? '?',
         '追補(契約)': row.addenda != null ? `${row.addenda}(${row.addendaContracts ?? '?'})` : '?',
         'QA(旧)': row.qa ?? '—',
         smoke: row.smoke ?? '—',
         逸脱有無: row.deviation && row.deviation !== 'なし' ? '有' : '無',
+        parallel: row.parallelEligible
+          ? {
+              minutes: row.reviewMinutes,
+              preMust: row.preMust,
+              preShould: row.preShould,
+              crossMust: row.crossMust,
+              crossShould: row.crossShould,
+              uniquePre: row.uniquePre,
+              uniqueCross: row.uniqueCross,
+              duplicate: row.duplicate,
+            }
+          : null,
         location,
       });
       const realWarnings = warnings.filter((w) => w !== 'R1内訳欠落');
@@ -154,7 +238,7 @@ function main() {
     console.log('実測フッターが見つかりませんでした（~/dev-notes 不在、または対象0件）。');
   } else {
     console.table(
-      rows.map(({ location, ...rest }) => rest),
+      rows.map(({ location, parallel, ...rest }) => rest),
     );
   }
 
@@ -171,9 +255,19 @@ function main() {
   const smokeInconclusive = smokeRows.filter((r) => r.smoke === '評価不能').length;
   const ratio = (n, d) => (d > 0 ? `${n}/${d} (${((n / d) * 100).toFixed(1)}%)` : '該当なし');
   const { count: qualityMissCount, exists: frictionExists } = countQualityMisses();
+  const parallelRows = rows.filter((r) => r.parallel != null);
+  const sum = (values) => values.reduce((total, value) => total + value, 0);
+  const average = (values) => (values.length > 0 ? (sum(values) / values.length).toFixed(1) : '該当なし');
 
   console.log('\n集計:');
   console.log(`- 実測フッター件数: ${rows.length}`);
+  console.log(`- 並列Ask件数: ${parallelRows.length}`);
+  console.log(`- 並列Ask平均レビュー分: ${average(parallelRows.map((r) => r.parallel.minutes))}`);
+  console.log(`- 並列Ask共同ラウンド合計: ${sum(parallelRows.map((r) => r.R数))}`);
+  console.log(`- 並列Ask R1 pre must/should合計: ${sum(parallelRows.map((r) => r.parallel.preMust))}/${sum(parallelRows.map((r) => r.parallel.preShould))}`);
+  console.log(`- 並列Ask R1 cross must/should合計: ${sum(parallelRows.map((r) => r.parallel.crossMust))}/${sum(parallelRows.map((r) => r.parallel.crossShould))}`);
+  console.log(`- 並列Ask 固有 pre/cross合計: ${sum(parallelRows.map((r) => r.parallel.uniquePre))}/${sum(parallelRows.map((r) => r.parallel.uniqueCross))}`);
+  console.log(`- 並列Ask 重複合計: ${sum(parallelRows.map((r) => r.parallel.duplicate))}`);
   console.log(`- smoke実施率: ${ratio(smokeDone, smokeRows.length)}（文法に合致する smoke欄を持つフッターが母数。文法外は警告に出し母数から除外、旧QA欄のみの過去directionは含まない）`);
   console.log(`- smoke FAIL件数: ${smokeFail}`);
   console.log(`- smoke未整備率: ${ratio(smokeUnready, smokeRows.length)}`);
