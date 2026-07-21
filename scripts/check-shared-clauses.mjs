@@ -29,19 +29,19 @@ const CLAUSE_PAIRS = [
     id: 'Showプレレビュー: diff指紋対象外展開（team-impl両版）',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /`\{\{DIFF_FINGERPRINT\}\}` は `対象外（Show）` へ置換する.*/,
+    regex: /`\{\{DIFF_FINGERPRINT\}\}` は `diff指紋: 対象外（Show）` へ置換する.*/,
   },
   {
     id: 'Showプレレビュー: diff指紋対象外条件（prompt ↔ team-impl claude）',
     fileA: 'src/plugin/skills/cross-review/references/review-prompt.md',
     fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
-    regex: /「対象外（Show）」が渡された場合は指紋を返さない/,
+    regex: /「diff指紋: 対象外（Show）」が渡された場合は最終報告へそのまま返す/,
   },
   {
     id: 'Showプレレビュー: diff指紋対象外条件（prompt ↔ team-impl codex）',
     fileA: 'src/plugin/skills/cross-review/references/review-prompt.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /「対象外（Show）」が渡された場合は指紋を返さない/,
+    regex: /「diff指紋: 対象外（Show）」が渡された場合は最終報告へそのまま返す/,
   },
   {
     id: 'implementer: 故意ずれ検体の実行',
@@ -78,6 +78,24 @@ const CLAUSE_PAIRS = [
     fileA: 'src/plugin-claude/agents/reviewer.md',
     fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
     regex: /完了条件: 最終報告がリーダーへ明示的に届くまで.*/,
+  },
+  {
+    id: '完了報告: implementer のrole別行頭ラベル',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /最終報告は、各ラベルを行頭に置いた `完了報告:`（変更ファイル一覧と概要）・`検証証跡:`（コマンド、exit code、pass\/fail件数、故意ずれ結果）・`逸脱:`・`未達事項:` の4項目を含める。/,
+  },
+  {
+    id: '完了報告: implementer-high のrole別行頭ラベル',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /最終報告は、各ラベルを行頭に置いた `完了報告:`（変更ファイル一覧と概要）・`検証証跡:`（コマンド、exit code、pass\/fail件数、故意ずれ結果）・`逸脱:`・`未達事項:` の4項目を含める。/,
+  },
+  {
+    id: '完了報告: reviewer のrole別行頭ラベルとShow指紋',
+    fileA: 'src/plugin-claude/agents/reviewer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    regex: /最終報告は、各ラベルを行頭に置いた `レビュー完了報告:`・`diff指紋:`・`指摘:`・`承認可否:` の4項目を含める。Showでは `diff指紋: 対象外（Show）` とする。/,
   },
   {
     id: 'implementer: 削除・rename の旧名残存 grep',
@@ -324,6 +342,30 @@ const CLAUSE_PAIRS = [
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
     regex: /宣言済みの複数境界が互いに独立なら.*/,
+  },
+  {
+    id: '高リスクrole: 局所割り当て（direction ↔ team-impl claude）',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    regex: /高リスク role は、高リスク基準に触れる契約・ファイル・完了条件を最小の高リスク編集面へ分けて局所割り当てし.*?ブリーフ全体を `implementer-high` とする。/,
+  },
+  {
+    id: '高リスクrole: 局所割り当て（direction ↔ team-impl codex）',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /高リスク role は、高リスク基準に触れる契約・ファイル・完了条件を最小の高リスク編集面へ分けて局所割り当てし.*?ブリーフ全体を `implementer-high` とする。/,
+  },
+  {
+    id: 'Ask smoke: 安定版への最終1回ゲート（direction ↔ team-impl claude）',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    regex: /Ask の smoke は、共同レビュー収束後に implementer の全量完了条件が green になった安定版へ.*?scenario-kit 自体が中心成果のタスクを除く）。/,
+  },
+  {
+    id: 'Ask smoke: 安定版への最終1回ゲート（direction ↔ team-impl codex）',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /Ask の smoke は、共同レビュー収束後に implementer の全量完了条件が green になった安定版へ.*?scenario-kit 自体が中心成果のタスクを除く）。/,
   },
   {
     id: 'implementer: 差し戻し再検証の影響範囲スコープ',
