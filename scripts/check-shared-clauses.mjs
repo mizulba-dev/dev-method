@@ -251,19 +251,19 @@ const CLAUSE_PAIRS = [
     id: '共同レビュー: 実測テンプレート文法（direction ↔ team-impl claude）',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
-    regex: /レビュー並列<N>R・<M>分（R1 pre must<N>\+should<N>；cross must<N>\+should<N>；固有 pre<N>\+cross<N>；重複<N>）/,
+    regex: /レビュー計画1R・21分（R1 must0\+should0\+nit0）.*?4分類 plan-escape0\+implementation-deviation0\+evidence-gap0\+new-risk0/,
   },
   {
     id: '共同レビュー: 実測テンプレート文法（direction ↔ team-impl codex）',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /レビュー並列<N>R・<M>分（R1 pre must<N>\+should<N>；cross must<N>\+should<N>；固有 pre<N>\+cross<N>；重複<N>）/,
+    regex: /レビュー計画1R・21分（R1 must0\+should0\+nit0）.*?4分類 plan-escape0\+implementation-deviation0\+evidence-gap0\+new-risk0/,
   },
   {
     id: '手順9: 共同ラウンド指標必須とsmoke確定の注記',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /共同ラウンド数・最初の共同ラウンド開始から同一版二者承認までのレビュー壁時計分.*/,
+    regex: /計画\/コードのラウンド数、R1の区分別件数、pre\/cross固有・重複、plan\/code ledgerの必須2実行点・stale・eligible、plan\/code R1 outcome、Evidence Package準備時間.*/,
   },
   {
     id: 'レビューループ: ラウンド上限を設けない方針（cross-review ↔ team-impl claude）',
@@ -379,14 +379,80 @@ const CLAUSE_PAIRS = [
     fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
     regex: /指摘の修正だけを行い、再検証は指摘の影響範囲.*/,
   },
+  {
+    id: 'Evidence: direction ↔ team-impl claude の固定作業単位・record・plan/code継続・footer契約',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    regex: /Evidence共有契約: Askでは canonical review-dir.*/,
+  },
+  {
+    id: 'Evidence: direction ↔ team-impl codex の固定作業単位・record・plan/code継続・footer契約',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /Evidence共有契約: Askでは canonical review-dir.*/,
+  },
+  {
+    id: 'Evidence: team-impl両版のcanonical作業単位入力',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /Ask の共同レビューでは、direction から引き継いだ canonical review-dir.*/,
+  },
+  {
+    id: 'Evidence: team-impl両版の固定checker verifyゲート',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /R1 を含む各共同ラウンドの起動直前に、`tooling-manifest.json` の絶対パスから固定 checker.*/,
+  },
+  {
+    id: 'Evidence: team-impl両版の同一package伝播と免責禁止',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /verify が exit 0 のときだけ、verify JSON の全境界manifest絶対パス.*/,
+  },
+  {
+    id: 'Evidence: team-impl両版の旧review unit転記禁止',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /R1 はプレレビュー・cross-review ともタスクごとの新規独立 session\/thread.*/,
+  },
+  {
+    id: 'Evidence: team-impl両版のcode ledger三値完了判定',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /両レビュー結果を受領した直後に `node <tooling-manifestのchecker絶対パス> review-ledger.*/,
+  },
+  {
+    id: 'Evidence: team-impl両版のcode ledger exit語彙',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /code ledger では各返却の `approve` を.*/,
+  },
+  {
+    id: 'Evidence: team-impl両版のAskゲート適用範囲',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /このゲートは team-impl が Ask の共同レビューとして呼ぶ経路だけに適用する.*/,
+  },
+  {
+    id: 'Evidence: implementer両版のmanifest・record契約',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /Evidence Packageを要求されたAskでは.*/,
+  },
+  {
+    id: 'Evidence: implementer-high両版のmanifest・record契約',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /Evidence Packageを要求されたAskでは.*/,
+  },
 ];
 
 function normalize(text) {
   return text.replace(/[ \t　]+/g, ' ').trim();
 }
 
-function findAllMatches(file, regex) {
-  const lines = readFileSync(file, 'utf8').split('\n');
+function findAllMatches(file, regex, reader) {
+  const lines = reader(file).split('\n');
   const hits = [];
   for (let i = 0; i < lines.length; i++) {
     const m = lines[i].match(regex);
@@ -395,34 +461,55 @@ function findAllMatches(file, regex) {
   return hits;
 }
 
-const mismatches = [];
-
-for (const pair of CLAUSE_PAIRS) {
-  const a = findAllMatches(pair.fileA, pair.regex);
-  const b = findAllMatches(pair.fileB, pair.regex);
+function checkPairs(reader) {
+  const mismatches = [];
+  for (const pair of CLAUSE_PAIRS) {
+    const a = findAllMatches(pair.fileA, pair.regex, reader);
+    const b = findAllMatches(pair.fileB, pair.regex, reader);
   if (a.length === 0 || b.length === 0) {
     mismatches.push(`${pair.id}: 対応箇所が見つからない（${a.length === 0 ? pair.fileA : pair.fileB}）`);
-    continue;
-  }
-  if (a.length !== b.length) {
+      continue;
+    }
+    if (a.length !== b.length) {
     mismatches.push(
       `${pair.id}: 一致数が異なる（${pair.fileA} ${a.length}件 vs ${pair.fileB} ${b.length}件）`,
     );
-    continue;
-  }
-  for (let i = 0; i < a.length; i++) {
-    if (normalize(a[i].text) !== normalize(b[i].text)) {
+      continue;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (normalize(a[i].text) !== normalize(b[i].text)) {
       mismatches.push(
         `${pair.id}: ${pair.fileA}:${a[i].line} と ${pair.fileB}:${b[i].line} がずれている`,
       );
+      }
     }
   }
+  return mismatches;
 }
 
+const diskReader = (file) => readFileSync(file, 'utf8');
+const mismatches = checkPairs(diskReader);
 if (mismatches.length > 0) {
   console.error('並行条項の不一致:');
   for (const m of mismatches) console.error(`- ${m}`);
   process.exit(1);
+}
+
+if (process.argv.includes('--self-test')) {
+  let passed = 0;
+  for (const pair of CLAUSE_PAIRS) {
+    const original = diskReader(pair.fileA);
+    const hit = findAllMatches(pair.fileA, pair.regex, diskReader)[0];
+    if (!hit) continue;
+    const changed = original.replace(hit.text, 'deliberate-drift');
+    const inMemoryReader = (file) => file === pair.fileA ? changed : diskReader(file);
+    if (checkPairs(inMemoryReader).some((message) => message.startsWith(`${pair.id}:`))) passed += 1;
+  }
+  if (passed !== CLAUSE_PAIRS.length) {
+    console.error(`check-shared-clauses self-test: ${passed}/${CLAUSE_PAIRS.length}`);
+    process.exit(1);
+  }
+  console.log(`check-shared-clauses self-test: ${passed}/${CLAUSE_PAIRS.length} deliberate drifts detected`);
 }
 
 console.log('check-shared-clauses: 一致（全ペア green）');

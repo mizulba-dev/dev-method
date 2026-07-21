@@ -106,6 +106,75 @@ function splitCommand(command) {
 const READ_ONLY_PIPE_FILTER = /^(head|tail|wc|grep|rg|sort|awk|cut|uniq|sed|nl|jq|cat|tr)\b/;
 const GIT_PREFIX = /^git\b/;
 
+function normalizeResultJson(resultText) {
+  const trimmed = resultText.trim();
+  const fenced = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n?```[ \t]*$/.exec(trimmed);
+  return fenced ? fenced[1].trim() : trimmed;
+}
+
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isFinding(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value).sort();
+  const expectedKeys = [
+    "body",
+    "file",
+    "line_end",
+    "line_start",
+    "recommendation",
+    "severity",
+    "title",
+  ];
+  if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index])) return false;
+  return (
+    ["must-fix", "should-fix", "nit"].includes(value.severity) &&
+    isNonEmptyString(value.title) &&
+    isNonEmptyString(value.body) &&
+    isNonEmptyString(value.file) &&
+    Number.isInteger(value.line_start) &&
+    value.line_start >= 0 &&
+    Number.isInteger(value.line_end) &&
+    value.line_end >= 0 &&
+    typeof value.recommendation === "string"
+  );
+}
+
+function parseReviewResult(resultText) {
+  const normalized = normalizeResultJson(resultText);
+  let result;
+  try {
+    result = JSON.parse(normalized);
+  } catch {
+    return { error: "結果JSONが単一のJSON objectとして解釈できませんでした" };
+  }
+
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return { error: "結果JSONのトップレベルはobjectでなければなりません" };
+  }
+  const keys = Object.keys(result).sort();
+  const expectedKeys = ["diff_fingerprint", "findings", "summary", "verdict"];
+  if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index])) {
+    return { error: "結果JSONの必須欄または許可されない欄が不正です" };
+  }
+  if (!/^[0-9a-f]{64}$/.test(result.diff_fingerprint) || !["approve", "needs-attention"].includes(result.verdict) || !isNonEmptyString(result.summary) || !Array.isArray(result.findings) || !result.findings.every(isFinding)) {
+    return { error: "結果JSONがcross-review schemaに適合しません" };
+  }
+
+  const actionableFindingCount = result.findings.filter(
+    (finding) => finding.severity === "must-fix" || finding.severity === "should-fix",
+  ).length;
+  if (
+    (result.verdict === "approve" && actionableFindingCount > 0) ||
+    (result.verdict === "needs-attention" && actionableFindingCount === 0)
+  ) {
+    return { error: "結果JSONのverdictとmust-fix / should-fix件数が整合しません" };
+  }
+  return { result };
+}
+
 // denylist（検証・変更系コマンド）に一致する実行だけを違反とする。パイプ後段は read-only
 // フィルタなら無視し、それ以外（xargs/sh/tee 等）は無条件で違反に含める。denylist に一致しない
 // 非 git コマンド（閲覧系）は違反にせず、hasNonGit で otherCommands 判定に使う。
@@ -136,7 +205,7 @@ if (parsedLineCount === 0) {
 }
 
 const isClaudeMode = entries.some((e) => e.type === "assistant" || e.type === "result");
-const isCodexMode = entries.some((e) => e.type === "item.completed" && e.item?.type === "command_execution");
+const isCodexMode = entries.some((e) => e.type === "item.completed" && ["command_execution", "agent_message"].includes(e.item?.type));
 
 if (!isClaudeMode && !isCodexMode) {
   console.error(
@@ -193,6 +262,10 @@ if (isClaudeMode) {
   // codex exec は閲覧（cat/sed/rg 等）もシェル経由で行うため許可リスト方式は偽陽性になりやすい。
   // 検証・変更系コマンドの denylist に一致した実行だけを違反として扱い、他の非 git コマンドは info 列挙に留める。
   for (const entry of entries) {
+    if (entry.type === "item.completed" && entry.item?.type === "agent_message" && typeof entry.item.text === "string") {
+      lastResultText = entry.item.text;
+      continue;
+    }
     if (entry.type !== "item.completed" || entry.item?.type !== "command_execution") continue;
     const command = unwrapShellCommand(entry.item.command ?? "");
     const { violation, hasNonGit } = classifyCommand(command);
@@ -206,12 +279,22 @@ if (isClaudeMode) {
   }
 }
 
-if (resultOutPath) {
-  if (lastResultText !== null) {
-    writeFileSync(resultOutPath, lastResultText, "utf8");
-  } else if (isClaudeMode) {
-    console.error("check-review-log: result イベントが見つからず、結果JSONを書き出せませんでした");
+let resultError = null;
+if (isClaudeMode || isCodexMode) {
+  if (lastResultText === null) {
+    resultError = "result イベントが見つからず、結果JSONを書き出せませんでした";
+  } else {
+    const parsedResult = parseReviewResult(lastResultText);
+    if (parsedResult.error) {
+      resultError = parsedResult.error;
+    } else if (resultOutPath) {
+      writeFileSync(resultOutPath, JSON.stringify(parsedResult.result, null, 2) + "\n", "utf8");
+    }
   }
+}
+
+if (resultError) {
+  console.error(`check-review-log: ${resultError}`);
 }
 
 const report = {
@@ -223,4 +306,4 @@ const report = {
   otherCommands,
 };
 process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-process.exit(violations.length > 0 ? 2 : 0);
+process.exit(resultError ? 1 : violations.length > 0 ? 2 : 0);

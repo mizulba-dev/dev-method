@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mizulba.dev/dev-method/evidence-package-v1.schema.json",
+  "title": "dev-method Evidence Package boundary manifest",
+  "type": "object",
+  "required": [
+    "format_version",
+    "review_unit_id",
+    "direction",
+    "boundary",
+    "contracts"
+  ],
+  "properties": {
+    "format_version": { "const": 1 },
+    "review_unit_id": { "type": "string", "format": "uuid" },
+    "direction": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "boundary": { "type": "string", "minLength": 1 },
+    "contracts": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/contractEvidence" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "hashedPath": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string" },
+        "sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "status": { "enum": ["added", "modified", "deleted", "renamed", "untracked"] },
+        "previous_path": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "contractEvidence": {
+      "type": "object",
+      "required": [
+        "id",
+        "evidence_type",
+        "changed_files",
+        "oracle_inputs",
+        "input_scope",
+        "expected_result",
+        "unverified",
+        "records"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^EC-[A-Z0-9]+-[0-9]+$" },
+        "evidence_type": { "enum": ["automated", "review-required"] },
+        "changed_files": { "type": "array", "items": { "$ref": "#/$defs/hashedPath" } },
+        "oracle_inputs": { "type": "array", "items": { "$ref": "#/$defs/hashedPath" } },
+        "input_scope": { "enum": ["explicit", "repository"] },
+        "repository_state": {
+          "type": "object",
+          "required": ["head", "diff_fingerprint"],
+          "properties": {
+            "head": { "type": "string" },
+            "diff_fingerprint": { "$ref": "#/$defs/sha256" }
+          },
+          "additionalProperties": false
+        },
+        "expected_result": { "type": "string", "minLength": 1 },
+        "unverified": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "records": { "type": "array", "items": { "$ref": "#/$defs/record" } }
+      },
+      "additionalProperties": false
+    },
+    "record": {
+      "type": "object",
+      "required": [
+        "command",
+        "expected_exit_code",
+        "exit_code",
+        "pass_count",
+        "fail_count",
+        "log_path",
+        "log_sha256",
+        "before_diff_fingerprint",
+        "after_diff_fingerprint",
+        "runtime_snapshot",
+        "recorded_by"
+      ],
+      "properties": {
+        "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "expected_exit_code": { "type": "integer" },
+        "exit_code": { "type": "integer" },
+        "pass_count": { "type": "integer", "minimum": 0 },
+        "fail_count": { "type": "integer", "minimum": 0 },
+        "log_path": { "type": "string" },
+        "log_sha256": { "$ref": "#/$defs/sha256" },
+        "before_diff_fingerprint": { "$ref": "#/$defs/sha256" },
+        "after_diff_fingerprint": { "$ref": "#/$defs/sha256" },
+        "runtime_snapshot": {
+          "type": "object",
+          "required": ["executable", "node", "npm", "platform", "arch", "lockfiles"],
+          "properties": {
+            "executable": { "$ref": "#/$defs/executableSnapshot" },
+            "node": { "$ref": "#/$defs/executableSnapshot" },
+            "npm": { "anyOf": [{ "$ref": "#/$defs/executableSnapshot" }, { "type": "null" }] },
+            "platform": { "type": "string", "minLength": 1 },
+            "arch": { "type": "string", "minLength": 1 },
+            "lockfiles": { "type": "array", "items": { "$ref": "#/$defs/hashedPath" } }
+          },
+          "additionalProperties": false
+        },
+        "recorded_by": {
+          "type": "object",
+          "required": ["checker_path", "checker_sha256"],
+          "properties": {
+            "checker_path": { "type": "string", "minLength": 1 },
+            "checker_sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "additionalProperties": false
+        },
+        "declared_unverified": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "mutation": { "type": "string" },
+        "initial_evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": { "type": "string" },
+              "sha256": { "$ref": "#/$defs/sha256" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "executableSnapshot": {
+      "type": "object",
+      "required": ["path", "sha256", "version"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "version": { "anyOf": [{ "type": "string" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -66,15 +66,37 @@ Show のプレレビューは must-fix / should-fix がゼロに収束するま�
 
 サブエージェントの完了報告を受けたら共同レビューへ進む。
 
+### Ask の作業単位と起動前ゲート
+
+Evidence共有契約: Askでは canonical review-dir の絶対パス、tooling manifestの`format_version`・`review_unit_id`・固定diff指紋実装、全境界Evidence Packageを全worktree・全ラウンドで共有する。完了条件と故意ずれは固定checkerのrecordだけから記録し、合意前計画レビューは更新後全文を全指摘ゼロまで再読、コード共同レビューR2以降は同じsession/threadを継続する。旧review unitの証跡・承認は転記せず、実測footerはplan/code/E2E/ledger/Evidence準備/4分類の固定文法を使う
+
+Ask の共同レビューでは、direction から引き継いだ canonical review-dir の絶対パス、その配下の `tooling-manifest.json` の絶対パスと内容 SHA-256、固定 `review_unit_id` を作業単位入力とする。リーダーはこの組を全 worktree・全ラウンドへそのまま渡し、worker ごとに tooling をコピー・再生成したり `review_unit_id` を作り直したりしない。複数の `.work/` から最新・先頭を選ばず、`dev-method-claude` / `dev-method-codex` の兄弟プラグインやキャッシュ位置も推測しない。
+
+R1 を含む各共同ラウンドの起動直前に、`tooling-manifest.json` の絶対パスから固定 checker・schema・diff 指紋実装を解決し、manifest 記録値とのパス・内容 SHA-256 と `review_unit_id` を再照合する。続けて `node <tooling-manifestのchecker絶対パス> verify --review-dir <canonical review-dir絶対パス> --direction <現行direction絶対パス> --manifest <境界manifest絶対パス> [--manifest ...]` を、全境界manifestを列挙して実行する。tooling manifest 欠落・固定コピーの欠落または hash 不一致・package manifest 欠落・stale 契約・実 diff の未対応・未復元の故意ずれ・未解決の automated 契約、または verify JSON の diff 指紋と固定 diff 指紋実装で計算した現行指紋の不一致は、reviewer の spawn と cross-review CLI の起動より前に fail-closed で停止する。source checker や worktree 個別コピーで代替せず、修復または stale 契約の再検証を担当 implementer へ戻す。
+
+verify が exit 0 のときだけ、verify JSON の全境界manifest絶対パスと内容 SHA-256、`review_unit_id`、direction 本文 SHA-256、現行 diff 指紋、およびmanifestから抽出したreview-required一覧をそのラウンドの固定入力にする。tooling manifest の絶対パス・内容 SHA-256も含め、プレレビューと cross-review の両方へ同じ値を渡す。Evidence Package は探索索引であって免責範囲ではないため、両者に diff 全体と必要な周辺コードを読み、契約漏れ・証拠の識別力・観測点の迂回・未モデル化リスクを確認させる。package 記載外を確認不要とは指示しない。
+
+このゲートは team-impl が Ask の共同レビューとして呼ぶ経路だけに適用する。Show のプレレビューと、セカンドオピニオンとして単独起動する cross-review に Ask 専用の tooling manifest / Evidence Package を要求しない。
+
+### ラウンド帳簿とセッション継続
+
+R1 はプレレビュー・cross-review ともタスクごとの新規独立 session/thread で起動する。R1 の起動イベント、session/thread ID、全文 prompt、返却結果、read-only 監査、tooling manifest の `review_unit_id`、現行 direction 本文 SHA-256、開始時・返却時・受領時の diff 指紋を canonical review-dir の Evidence Package へ記録する。旧 review unit の prompt・結果・イベント・review-required 判断を、同じ diff 指紋であっても新しい review-dir へ転記しない。
+
+R2 以降のプレレビューは R1 と同じ reviewer サブエージェントへの `followup_task`、cross-review は R1 と同じ provider session/thread の resume を使う。再開 prompt には新しい diff 指紋、前回 findings、対応内容、変更ファイル、更新された Evidence Package と上記の作業単位入力をすべて渡し、read-only の tools 制約を再指定するか、継承された制約をログから確認する。session/thread ID を取得できない、resume に失敗する、または read-only 制約を確認できない場合は、その reviewer の旧承認を失効させて新規 session/thread を起動し、新規起動イベントと理由を含む逸脱記録の両方を残す。別 session へ黙って切り替えず、片方の旧承認も流用しない。
+
+両レビュー結果を受領した直後に `node <tooling-manifestのchecker絶対パス> review-ledger --phase code --review-dir <canonical review-dir絶対パス> --direction <現行direction絶対パス> --events <canonical review-dir/evidence/review-events.jsonl絶対パス> --execution-point results-received`、共同ラウンドの完了判定直前に同じコマンドの `--execution-point before-completion` を実行する。各実行は checker が検査前に原子的に先書きする invocation ID・phase・実行点付きの自己イベントを同じ events ファイルへ保存する。exit 1 は帳簿異常なので指摘反映・次ラウンド判断・完了判定のすべてを拒否する。exit 2 は帳簿が整合した反復継続であり、指摘が1件でもあれば verdict 欠落との併発有無にかかわらず全指摘を1バッチで反映する。指摘ゼロの verdict 欠落または `stale_approved_diff` なら本文をさらに変更せず、次の共同レビューだけを起動する。両者が現行指紋へ `approve`、must-fix / should-fix がゼロ、read-only 逸脱ゼロの exit 0 だけが完了判定を許す。
+
+code ledger では各返却の `approve` を must-fix / should-fix ゼロ、`needs-attention` を1件以上の場合だけ許す。片方の `needs-attention`、返却結果内の verdict 欠落、または最終承認後だけ現行 diff が変わった `stale_approved_diff` は exit 2 とする。approve と指摘の併存、needs-attention と指摘ゼロ、verdict の文法外値、同一ラウンド内の指紋不整合、reviewer 結果イベント自体の欠落、作業単位・direction hash・session/thread・新規起動イベント・逸脱記録・read-only 監査の不整合は exit 1 とする。verdict 欠落と指摘が併発した exit 2 は指摘反映を優先し、既知の exit 2 以外を次ラウンドへ流さない。
+
 共同ラウンドは、先に `cross-review` の手順1〜2だけを実行して作業ディレクトリ・helper・開始時 diff 指紋を準備し、次に reviewer を spawn し、その起動後に完了を待たず `cross-review` の手順3以降を開始する。
 
 同じ開始時指紋に対して、`reviewer` プロファイル（GPT-5.6 Sol / high）を `spawn_agent` で起動し、その完了を `wait_agent` で待つ前に `cross-review` をバックグラウンド起動する。reviewer は前提セットアップの capability 分岐に従う。対応 runtime では `agent_type="reviewer"`・`fork_turns="none"` を指定し、`model` / `reasoning_effort` は重複指定せず reviewer TOML を正本にする。`agent_type` field が無い事前同期済み runtime では、`agent_type` を渡さず reviewer TOML の `developer_instructions` を message 冒頭へ同梱し、`fork_turns="none"` で起動する。`task_name` は `pre_review_1` / `pre_review_2` のような一意名にし、reviewer の role 選択子として扱わない。read-only 強制はプロンプト指示のみで sandbox レベルの強制は未検証: 書き込みが発生していないか diff で都度確認する。
 
-両レビューには同じ開始時 diff 指紋・計画ファイル・対象範囲・implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）・重点観点を渡す。spawn prompt の基本観点は `cross-review` の `references/review-prompt.md` の観点ブロックと揃え、確信度の高い指摘のみを重大度順で求める。reviewer はテストを実行しない静的レビュー専任で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。reviewer の最終報告には開始時 diff 指紋を64桁小文字16進でそのまま返させる。
+両レビューには同じ開始時 diff 指紋・計画ファイル・対象範囲・implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）・重点観点を渡す。Ask ではさらに、起動前ゲートで固定した tooling manifest と全境界manifestの絶対パス・内容 SHA-256、`review_unit_id`、review-required 一覧、direction 本文 SHA-256 も同一値で渡す。spawn prompt の基本観点は `cross-review` の `references/review-prompt.md` の観点ブロックと揃え、確信度の高い指摘のみを重大度順で求める。reviewer はテストを実行しない静的レビュー専任で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。reviewer の最終報告には開始時 diff 指紋を64桁小文字16進でそのまま返させる。
 
 実行可能な検知器（テスト基盤・検証スクリプト・パーサ・品質ゲート）の変更では、direction の検証設計に列挙された故意ずれ検体と implementer の実行証跡を両レビューの起動指示へ含め、各失敗クラスが false green にならないか照合する。実行証跡が無い失敗クラスは should-fix とし、reviewer の権限を広げず implementer へ実行を差し戻す。共同ラウンド開始前に検体ファイル一式が作業ツリーに残っていることを確認し、欠けている検体は implementer へ再生成を差し戻す（異ベンダーの独立実行検証は残存する検体で再現できることが前提）。
 
-片方の結果だけで修正を始めず、両結果が揃うまで待つ。結果受領後、プレレビューの返却指紋、cross-review JSON の `diff_fingerprint`、helper を再実行した現行 diff 指紋を開始時指紋と照合する。いずれかが不一致なら両結果を承認・指摘処理に使わず、変更者・変更理由を確認して現行差分から共同ラウンドをやり直す。
+片方の結果だけで修正を始めず、両結果が揃うまで待つ。結果受領後、プレレビューの返却指紋、cross-review JSON の `diff_fingerprint`、固定 helper を再実行した現行 diff 指紋を開始時指紋と照合する。Ask では両結果受領イベントの `review_unit_id`・direction 本文 SHA-256・tooling manifest と全境界manifestの絶対パス・内容 SHA-256 も起動時入力と照合する。Ask でいずれかが不一致なら結果を承認・指摘処理に使わず、code ledger の exit 1 として次ラウンド判断も停止し、変更者・変更理由と帳簿を確認する。standalone では従来どおり現行差分からラウンドをやり直す。
 
 指摘の処理: 両結果を失敗シナリオ／根本原因単位へ正規化し、重複・プレ固有・cross固有・相反に分類してから採否を裁定する。相反や棄却判断に迷う場合は既存の advisor／fail-closed の経路を使う。両結果が揃う前に diff を変更せず、採用した must-fix / should-fix は一つの修正バッチにまとめ、軽微はリーダー直修正、それ以外は implementer へ差し戻す。修正後は以前の両承認を失効させ、更新後の同じ diff 指紋へ両レビューを再起動する。
 
@@ -106,9 +128,9 @@ nit はループの終了条件にせず、各ラウンドで検出された nit
 8. レビュー収束後、コミット前に担当 implementer へ全量の完了条件コマンドを1回通し直させ、証跡を確認する（差し戻し修正の再検証は影響範囲に絞られているため、最終の全量1回で締める。差し戻しが無かった境界は初回証跡のままでよい）。Ask の smoke は、共同レビュー収束後に implementer の全量完了条件が green になった安定版へ、リーダーが `scenario-kit smoke` を1回だけ実行する最終証跡の機械ゲートとする。既存シナリオまたは軽微な変種で覆える場合だけ実行し、新規シナリオ・helper・assertion・検知器の実装が必要なら `未整備` として別 follow-up へ分け、シナリオ変更をプロダクトの実装境界や共同レビュー diff へ混ぜない（scenario-kit 自体が中心成果のタスクを除く）。実行した場合は exit code・`report.json`・video パスを実測フッターへ引き継ぐ。その後リーダーがコミットする（対象リポジトリのコミット規約に従う。無ければ日本語メッセージ）。ステージングは変更対象パスの明示指定で行い、`git add -A` / `git add .` を使わない。コミット直前に `git status` で意図外の未追跡物・変更が混ざっていないことを確認する
 9. 全タスク完了後、変更一覧・検証結果・レビュー指摘の処理結果を**報告様式**に従って要点のみで報告する。報告に実測フッターを1行含める（数値は概算でよい。direction がある場合はその完了記載にも転記する）:
 
-   `実測: レーンAsk / 担当<model/effort> / レビュー並列<N>R・<M>分（R1 pre must<N>+should<N>；cross must<N>+should<N>；固有 pre<N>+cross<N>；重複<N>） / 差し戻し<N> / リーダー直修正<N> / 追補<N>（契約<N>） / smoke <PASS|FAIL n件|評価不能|対象外|未整備> / 逸脱: <スキル手順と実態がずれた点。無ければ「なし」>`
+   `実測: レーンAsk / 担当<model/effort> / レビュー計画1R・21分（R1 must0+should0+nit0） / レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0） / ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true / ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true / R1 plan approved / R1 code approved / E2E 44分 / Evidence Package 準備2分（開始10:00・終了10:02；テスト5分） / 4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0 / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`
 
-   共同ラウンド数・最初の共同ラウンド開始から同一版二者承認までのレビュー壁時計分・R1 の pre/cross 別 must/should・pre/cross 固有指摘数・重複指摘数を必ず含める。固有／重複は must-fix / should-fix だけを根本原因単位で数え、nit は含めない。相反は裁定後に採用した側の固有へ数え、棄却した指摘は数えない。smoke は direction 検証設計の定型観点で要否を決めているため、完了報告の時点でテンプレートのいずれかの値に確定させる（評価不能の定義は direction の実測フッター規定に準じる）。
+   計画レビューとコード共同レビューは各ラウンドの開始から結果集約までの工程別壁時計を別々に記録し、`E2E`にはその合計を記録する。計画/コードのラウンド数、R1の区分別件数、pre/cross固有・重複、plan/code ledgerの必須2実行点・stale・eligible、plan/code R1 outcome、Evidence Package準備時間（開始・終了・内数のテスト時間）、レビュー指摘の4分類を固定順で持つ。固有／重複は must-fix / should-fix だけを根本原因単位で数え、nit は含めない。smoke は direction 検証設計の定型観点で要否を決めているため、完了報告の時点でテンプレートのいずれかの値に確定させる（評価不能の定義は direction の実測フッター規定に準じる）。
 
 ## 完了条件
 
