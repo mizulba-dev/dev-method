@@ -124,7 +124,7 @@ function makeSession(path, client) {
     breakdown: { llmGenerationMs: 0, methodOpsMs: 0, toolExecutionMs: 0, delegationWaitMs: 0, unattributedMs: 0 },
     ...(client === 'codex'
       ? { durationCheckMs: null, mcpDurationMs: 0, tokens: null }
-      : { turnDurationCheckMs: null, tokens: null }),
+      : { turnDurationCheckMs: null, turnWindowActiveMs: null, turnWindowCheckMs: null, tokens: null }),
     cutoffBytes: null, // 測定 cutoff（起動時のファイルサイズ）。ファイル解析時のみ設定、配列解析（analyze）では null
     loops: [],
     quality: { parsedLines: 0, skippedLines: 0, orphanToolUses: 0, unknownEvents: 0, timestampMissing: 0 },
@@ -224,18 +224,48 @@ function createClaudeAnalyzer(methodPaths) {
   let firstTs = null; let lastTs = null;
   let prevTs = null; let prevUnknown = false;
   let taint = false; // untimestamped/unknown timing イベントを跨ぐ区間の汚染
+  let turnEndTs = null; // 直近 turn 終端（turn_duration）の timestamp。次の timeline イベントまでが turn 外
+  let turnWindowActive = null; // clean な turn 窓内で active に分類された時間（clean 窓が1つでもあれば非 null）
+  let turnWindowCheck = null; // clean な turn 窓の durationMs 合計（窓限定検算の分母）
+  let lastPromptTs = null; // 直近プロンプトの timestamp。窓内部のプロンプト（steering / teammate）検知に使う
+  const turnWindows = []; // 消費待ちの clean 窓。窓終端 ≤ 直近 timeline ts で破棄
+  const activeSpans = []; // 窓未到着（turn_duration 前）の active 区間バッファ。窓消費とプロンプトで剪定
+
+  // active に分類した区間を記録し、既着の turn 窓と重なる分を窓限定検算 turnWindowActive へ加算する。
+  const noteActive = (start, end) => {
+    for (const w of turnWindows) {
+      const overlap = Math.min(end, w.end) - Math.max(start, w.start);
+      if (overlap > 0) turnWindowActive += overlap;
+    }
+    activeSpans.push([start, end]);
+  };
 
   const addInterval = (curr, currTs) => {
     if (prevTs == null) return;
-    const gap = currTs - prevTs;
-    if (gap < 0) { session.breakdown.unattributedMs += 0; return; } // 逆行は加算しない（後で正規化）
+    if (currTs - prevTs < 0) return; // 逆行は加算しない（後で正規化）
+    // turn 終端（turn_duration）から次の timeline イベントまでは turn 外。pending・イベント種別に関わらず
+    // userWaitMs へ一意帰属し（Codex の turn 外規則と対称。人間入力・teammate/task 通知の応答待ちとも）、
+    // 境界前の残区間は turn 内規則で分類する。
+    let end = currTs;
+    let flags = curr;
+    if (turnEndTs != null) {
+      const boundary = Math.min(Math.max(turnEndTs, prevTs), currTs);
+      session.userWaitMs += currTs - boundary;
+      if (boundary === prevTs) return;
+      end = boundary;
+      flags = { promptKind: null, methodOpCall: false, unknown: curr.unknown }; // curr のイベント種別は turn 外側
+    }
+    const gap = end - prevTs;
     let bucket;
-    if (taint || prevUnknown || curr.unknown) bucket = 'unattributedMs';
+    if (taint || prevUnknown || flags.unknown) bucket = 'unattributedMs';
+    // プロンプト（human / teammate / task 通知）で終わる区間は turn 開始前の応答待ち。turn_duration の無い
+    // turn の turn 外相当をこの規則で吸収するため、並行 pending より優先して userWaitMs へ帰属する。
+    else if (flags.promptKind != null) { session.userWaitMs += gap; return; }
     else if (pending.size > 0) bucket = pendingBucket(pending);
-    else if (curr.methodOpCall) bucket = 'methodOpsMs';
-    else if (curr.promptKind === 'human') { session.userWaitMs += gap; return; }
-    else bucket = 'llmGenerationMs'; // injected（teammate/task）や tool_result 後の区間は直前イベント種別規則で LLM 生成へ
+    else if (flags.methodOpCall) bucket = 'methodOpsMs';
+    else bucket = 'llmGenerationMs'; // turn 内の tool_result 後の区間は直前イベント種別規則で LLM 生成へ
     session.breakdown[bucket] += gap;
+    noteActive(prevTs, end);
   };
 
   const feed = (line) => {
@@ -255,6 +285,31 @@ function createClaudeAnalyzer(methodPaths) {
     // 残差として unattributedMs へ反映される。
     const ts = tsMs(event.timestamp);
     if (Number.isFinite(ts)) { if (firstTs == null) firstTs = ts; lastTs = ts; }
+
+    // turn 終端の記録と turn 窓の確定。turn_duration は turn 開始プロンプトに窓開始がアンカーされた壁時計
+    // durationMs を運ぶ（実ログ検証で開始点とプロンプトの差0秒）。窓の内部にプロンプト（steering・teammate 等の
+    // 途中投入）を含む turn は、durationMs が turn 内の応答待ちを含み active と一致しようがないため検算から除外し
+    // （dirty 窓）、内部プロンプトの無い clean 窓だけを窓限定検算（turnWindowActiveMs / turnWindowCheckMs）に使う。
+    // timestamp の無い turn_duration は境界位置が不明なため boundary も窓も張らない（従来分類のまま）。
+    // 次の timeline イベントまでに複数現れた場合は最初の境界を保持する。
+    if (event.type === 'system' && event.subtype === 'turn_duration' && Number.isFinite(ts)) {
+      if (Number.isFinite(event.durationMs) && event.durationMs > 0) {
+        const window = { start: ts - event.durationMs, end: ts };
+        // アンカー（窓開始のプロンプト自身）は clock 揺れ許容 1秒。それより後のプロンプトは内部プロンプト＝dirty。
+        const dirty = lastPromptTs != null && lastPromptTs > window.start + 1000;
+        if (!dirty) {
+          if (turnWindowActive == null) { turnWindowActive = 0; turnWindowCheck = 0; }
+          turnWindowCheck += event.durationMs;
+          for (const [start, end] of activeSpans) {
+            const overlap = Math.min(end, window.end) - Math.max(start, window.start);
+            if (overlap > 0) turnWindowActive += overlap;
+          }
+          turnWindows.push(window); // 窓終端をまたぐ区間（境界分割の head）の重なりは noteActive 側で加算する
+        }
+        activeSpans.length = 0; // 窓終端以前に分類済みの区間は以後の窓（次プロンプト以降開始）と重ならない
+      }
+      if (turnEndTs == null) turnEndTs = ts;
+    }
 
     // timeline に載せる型は user / assistant のみ。既知メタ・system・queue-operation は時間分類へ関与させない。
     const isTimeline = !unknown && (event.type === 'user' || event.type === 'assistant');
@@ -291,10 +346,32 @@ function createClaudeAnalyzer(methodPaths) {
       }
     }
 
-    prevTs = ts; prevUnknown = false; taint = false;
+    // 窓終端が現 timeline ts 以前の窓は消費済み（以後の区間と重ならない）。プロンプト到着時は turn が替わる
+    // ため、それ以前に終わる active バッファも剪定する（以後の clean 窓は現プロンプト以降からしか始まらない）。
+    while (turnWindows.length > 0 && turnWindows[0].end <= ts) turnWindows.shift();
+    if (curr.promptKind != null) { activeSpans.length = 0; lastPromptTs = ts; }
+
+    prevTs = ts; prevUnknown = false; taint = false; turnEndTs = null; // 境界は直後の timeline イベントで消費される
   };
 
   const done = () => {
+    // EOF で未消費の turn 境界を解決する: turn_duration の後に timeline イベントが無いまま cutoff に達した場合、
+    // 境界前 head を turn 内規則で分類して clean 窓の分子にも加算し、境界後から最終イベントまでを userWaitMs へ
+    // 帰属する（turn 外の残尾が finalize 残差で unattributedMs＝active へ吸収されるのを防ぐ）。
+    if (turnEndTs != null && prevTs != null && lastTs != null && lastTs >= prevTs) {
+      const boundary = Math.min(Math.max(turnEndTs, prevTs), lastTs);
+      session.userWaitMs += lastTs - boundary;
+      if (boundary > prevTs) {
+        let bucket;
+        if (taint || prevUnknown) bucket = 'unattributedMs';
+        else if (pending.size > 0) bucket = pendingBucket(pending);
+        else bucket = 'llmGenerationMs';
+        session.breakdown[bucket] += boundary - prevTs;
+        noteActive(prevTs, boundary);
+      }
+    }
+    session.turnWindowActiveMs = turnWindowActive;
+    session.turnWindowCheckMs = turnWindowCheck;
     session.quality.orphanToolUses = pending.size;
     session.loops = [...loops.values()].filter((entry) => entry.count >= 3).map(({ tool, path, count }) => ({ tool, path, count }));
     session.wallClockMs = firstTs == null || lastTs == null ? 0 : lastTs - firstTs;

@@ -1046,14 +1046,15 @@ function sessionMetricsFixtures() {
   ])]);
   assertion('mc01-delegation-priority', bd(fc3).delegationWaitMs === 4000 && bd(fc3).toolExecutionMs === 0 && bd(fc3).methodOpsMs === 0, { bd: fc3.json && bd(fc3) });
 
-  // FC queue-operation / teammate はユーザー待ちに算入しない（EC-MC-1）。
+  // FC teammate 通知前の区間は turn 開始前の応答待ちとして userWait へ帰属する（turn_duration の有無に依存しない
+  // プロンプト終端規則。queue-operation 自体は非 timeline のまま）（EC-MC-1）。
   const fcQueue = runMetrics([writeLog('fc-queue-teammate', [
     cUser(0, 'start'), cAssistantText(1000, 'done'),
     { type: 'queue-operation', operation: 'enqueue', timestamp: iso(2000), content: '## task-notification teammate' },
     cUser(3000, 'Another Claude session sent a message:\n<teammate-message team="x">hi</teammate-message>'),
     cAssistantText(4000, 'reply'),
   ])]);
-  assertion('mc01-queue-teammate-not-userwait', fcQueue.status === 0 && s0(fcQueue).userWaitMs === 0, { uw: fcQueue.json && s0(fcQueue).userWaitMs });
+  assertion('mc01-queue-teammate-userwait', fcQueue.status === 0 && s0(fcQueue).userWaitMs === 2000 && bd(fcQueue).llmGenerationMs === 2000, { uw: fcQueue.json && s0(fcQueue).userWaitMs, llm: fcQueue.json && bd(fcQueue) });
 
   // FC 中断ターン欠落 + 検算値無視（Codex, EC-MC-2 反証a/b）。
   const fcAbort = runMetrics([writeLog('fc-codex-abort', [
@@ -1194,11 +1195,15 @@ function sessionMetricsFixtures() {
   assertion('mc01-totals-summed', multi.json && multi.json.totals.wallClockMs === s0(mirrorClaude).wallClockMs + s0(fc1).wallClockMs
     && multi.json.totals.userWaitMs === s0(mirrorClaude).userWaitMs + s0(fc1).userWaitMs, { t: multi.json && multi.json.totals });
 
-  // turn_duration 検算（存在時は合算値）（EC-MC-1）。
+  // turn_duration 検算（存在時は合算値）と窓限定検算（EC-MC-1）。turn1 窓 [0,1100] は区間 [0,1000]＋境界 head
+  // [1000,1100] で 1100。turn2 窓は durationMs=1000 がプロンプト(5000)より 100ms 短い [5100,6100] のため
+  // [5000,5100] の 100ms がクリップされ、[5000,6000] の重なり 900＋EOF 解決の head [6000,6100] 100 で 1000
+  //（窓の外は加算しない性質と、末尾 head が done() で分子へ入る性質の固定）。
   const fcTurnDur = runMetrics([writeLog('fc-turnduration', [
     cUser(0, 'start'), cAssistantText(1000, 'x'), cSystemTurn(1100, 1100), cUser(5000, 'next human'), cAssistantText(6000, 'y'), cSystemTurn(6100, 1000),
   ])]);
   assertion('mc01-turnduration-sum', s0(fcTurnDur).turnDurationCheckMs === 2100, { tdc: fcTurnDur.json && s0(fcTurnDur).turnDurationCheckMs });
+  assertion('mc01-turnwindow-active', s0(fcTurnDur).turnWindowActiveMs === 2100 && s0(fcTurnDur).turnWindowCheckMs === 2100, { twa: fcTurnDur.json && s0(fcTurnDur).turnWindowActiveMs, twc: fcTurnDur.json && s0(fcTurnDur).turnWindowCheckMs });
 
   // RC-A(1) turn 状態機械: pending 残留のまま turn_aborted → 次 task_started まで userWait・残留は orphan（EC-MC-2/4）。
   const fcAbortPending = runMetrics([writeLog('fc-codex-abort-pending', [
@@ -1336,6 +1341,107 @@ function sessionMetricsFixtures() {
   const fcPreLimit = runMetrics([writeLog('fc-pre-detection-limit', Array.from({ length: 300 }, (unused, i) => ({ foo: 'bar', i })))]);
   assertion('mc04-pre-detection-limit-exit1', fcPreLimit.status === 1, { exit: fcPreLimit.status });
 
+  // mc07: Claude の turn 外区間（turn_duration → 次 timeline イベント）の userWait 一意帰属（EC-MC-2 対称）。
+  // (1) teammate 待ち × 委譲 pending 越境: 境界前 head は delegationWait、境界後 tail は userWait。
+  // 境界無視実装は userWait=0、分割無し（全区間 userWait）実装は delegationWait=1000 で落ちる識別 assertion。
+  const fcTurnExternal = runMetrics([writeLog('fc-claude-turn-external', [
+    cUser(0, 'start'),
+    cAssistantTools(1000, [{ id: 'a1', name: 'Agent', input: { description: 'teammate' } }]),
+    cSystemTurn(2000, 2000),
+    cUser(30000, 'Another Claude session sent a message:\n<teammate-message team="x">done</teammate-message>'),
+    cAssistantText(31000, 'ack'),
+  ])]);
+  assertion('mc07-turn-external-userwait', s0(fcTurnExternal).userWaitMs === 28000, { uw: fcTurnExternal.json && s0(fcTurnExternal).userWaitMs });
+  assertion('mc07-turn-external-head-delegation', bd(fcTurnExternal).delegationWaitMs === 2000 && bd(fcTurnExternal).llmGenerationMs === 1000, { bd: fcTurnExternal.json && bd(fcTurnExternal) });
+  assertion('mc07-turn-external-invariant', invariantHolds(s0(fcTurnExternal)));
+
+  // (2) task-notification 待ち（pending なし）: tail が userWait、turn 内区間は LLM 生成のまま。
+  const fcTaskNotify = runMetrics([writeLog('fc-claude-task-notification', [
+    cUser(0, 'start'), cAssistantText(1000, 'kicked off background review'),
+    cSystemTurn(1100, 1100),
+    cUser(20000, '<task-notification>background task finished</task-notification>'),
+    cAssistantText(21000, 'processed'),
+  ])]);
+  assertion('mc07-task-notification-userwait', s0(fcTaskNotify).userWaitMs === 18900 && bd(fcTaskNotify).llmGenerationMs === 2100, { uw: fcTaskNotify.json && s0(fcTaskNotify).userWaitMs, llm: fcTaskNotify.json && bd(fcTaskNotify).llmGenerationMs });
+
+  // (3) 非委譲 pending の越境 × 人間プロンプト: 並行 pending 優先規則が turn 外を侵食しない
+  // （境界前 toolExecution・境界後 userWait。pending 優先を turn 外まで適用する実装は userWait=0 で落ちる）。
+  const fcTurnPendingHuman = runMetrics([writeLog('fc-claude-turn-pending-human', [
+    cUser(0, 'start'),
+    cAssistantTools(1000, [{ id: 'b1', name: 'Bash', input: { command: 'sleep 999' } }]),
+    cSystemTurn(1500, 1500),
+    cUser(10000, 'human follow-up'),
+    cAssistantText(11000, 'reply'),
+  ])]);
+  assertion('mc07-turn-pending-human-userwait', s0(fcTurnPendingHuman).userWaitMs === 8500 && bd(fcTurnPendingHuman).toolExecutionMs === 1500, { uw: fcTurnPendingHuman.json && s0(fcTurnPendingHuman).userWaitMs, te: fcTurnPendingHuman.json && bd(fcTurnPendingHuman).toolExecutionMs });
+  assertion('mc07-turn-pending-human-invariant', invariantHolds(s0(fcTurnPendingHuman)));
+
+  // (4) 検算整合: turn_duration のある完結ログで activeMs が turnDurationCheckMs と一致する（欠測構造の解消を固定）。
+  // 最終 turn の末尾 100ms（最後の timeline イベント→turn 終端）は done() の EOF 境界解決で llmGeneration と
+  // 窓分子の双方へ入り、窓限定検算もゼロ乖離になる。
+  const fcTurnCheck = runMetrics([writeLog('fc-claude-turn-check', [
+    cUser(0, 'start'), cAssistantText(1000, 'x'), cSystemTurn(1100, 1100),
+    cUser(5000, '<task-notification>done</task-notification>'), cAssistantText(6000, 'y'), cSystemTurn(6100, 1100),
+  ])]);
+  assertion('mc07-turn-check-active-equals-check', s0(fcTurnCheck).activeMs === s0(fcTurnCheck).turnDurationCheckMs && s0(fcTurnCheck).turnDurationCheckMs === 2200, { a: fcTurnCheck.json && s0(fcTurnCheck).activeMs, tdc: fcTurnCheck.json && s0(fcTurnCheck).turnDurationCheckMs });
+  assertion('mc07-turn-check-window-active', s0(fcTurnCheck).turnWindowActiveMs === 2200 && bd(fcTurnCheck).unattributedMs === 0, { twa: fcTurnCheck.json && s0(fcTurnCheck).turnWindowActiveMs, un: fcTurnCheck.json && bd(fcTurnCheck) });
+
+  // (5) プロンプト終端規則の pending 優先逆転: teammate 通知で終わる区間は委譲 pending 中でも userWait
+  // （turn_duration の無い turn の turn 外相当を吸収する規則。pending 優先の旧実装は userWait=0 で落ちる）。
+  const fcInjectedPending = runMetrics([writeLog('fc-claude-injected-pending', [
+    cUser(0, 'start'),
+    cAssistantTools(1000, [{ id: 'a1', name: 'Agent', input: { description: 'teammate' } }]),
+    cUser(30000, 'Another Claude session sent a message:\n<teammate-message team="x">done</teammate-message>'),
+    cAssistantText(31000, 'ack'),
+  ])]);
+  assertion('mc07-injected-over-pending', s0(fcInjectedPending).userWaitMs === 29000 && bd(fcInjectedPending).delegationWaitMs === 1000, { uw: fcInjectedPending.json && s0(fcInjectedPending).userWaitMs, d: fcInjectedPending.json && bd(fcInjectedPending) });
+
+  // (6) 部分カバレッジの窓限定検算: turn_duration の無い turn（10000→15000 の 5000ms 生成）は activeMs には
+  // 入るが窓限定検算には入らない。全体 active（7200）と検算値（2200）を直接比較する実装は 227% 乖離で
+  // 欠測を再現し、窓限定（2200 vs 2200）は turn_duration の部分出力ログでも成立する（実測 friction の再現検体。
+  // 末尾 turn の head 100ms は EOF 境界解決で分子へ入る）。
+  const fcPartialWindows = runMetrics([writeLog('fc-claude-partial-windows', [
+    cUser(0, 'start'), cAssistantText(1000, 'x'), cSystemTurn(1100, 1100),
+    cUser(10000, '<teammate-message team="x">r1</teammate-message>'), cAssistantText(15000, 'long reply, no turn_duration'),
+    cUser(30000, 'human follow-up'), cAssistantText(31000, 'y'), cSystemTurn(31100, 1100),
+  ])]);
+  assertion('mc07-partial-windows', s0(fcPartialWindows).turnWindowActiveMs === 2200 && s0(fcPartialWindows).turnWindowCheckMs === 2200 && s0(fcPartialWindows).activeMs === 7200, { twa: fcPartialWindows.json && s0(fcPartialWindows).turnWindowActiveMs, twc: fcPartialWindows.json && s0(fcPartialWindows).turnWindowCheckMs, a: fcPartialWindows.json && s0(fcPartialWindows).activeMs });
+  assertion('mc07-partial-windows-invariant', invariantHolds(s0(fcPartialWindows)));
+
+  // (7) 窓の無いログは窓限定検算 null（検算不能を 0 と区別する fail-closed）。
+  assertion('mc07-no-windows-null', s0(fc1).turnWindowActiveMs === null && s0(fc1).turnWindowCheckMs === null, { twa: fc1.json && s0(fc1).turnWindowActiveMs });
+
+  // (8) dirty 窓の除外: 窓内部にプロンプト（steering / teammate の途中投入）を含む turn の durationMs は
+  // turn 内応答待ちを含むため、窓限定検算の分子・分母双方から除外する（turnDurationCheckMs には残る）。
+  // 全窓を検算へ入れる実装は twc=4200 で落ち、チーム長大 turn の再欠測（実測 friction の 89%/100% 乖離）を防ぐ。
+  const fcDirtyWindow = runMetrics([writeLog('fc-claude-dirty-window', [
+    cUser(0, 'start'), cAssistantText(1000, 'a'),
+    cUser(2000, 'Another Claude session sent a message:\n<teammate-message team="x">mid-turn</teammate-message>'),
+    cAssistantText(3000, 'b'), cSystemTurn(3100, 3100),
+    cUser(10000, 'human next'), cAssistantText(11000, 'c'), cSystemTurn(11100, 1100),
+    cUser(20000, 'human tail'),
+  ])]);
+  assertion('mc07-dirty-window-excluded', s0(fcDirtyWindow).turnWindowCheckMs === 1100 && s0(fcDirtyWindow).turnWindowActiveMs === 1100 && s0(fcDirtyWindow).turnDurationCheckMs === 4200, { twc: fcDirtyWindow.json && s0(fcDirtyWindow).turnWindowCheckMs, twa: fcDirtyWindow.json && s0(fcDirtyWindow).turnWindowActiveMs, tdc: fcDirtyWindow.json && s0(fcDirtyWindow).turnDurationCheckMs });
+
+  // (9) EOF 境界解決（cross R1 must-fix の再現検体）: 最終 turn の turn_duration 後に timeline イベントが無い
+  // まま cutoff。末尾 head [100,1000] を done() が llmGeneration と窓分子へ解決し、窓限定検算ゼロ乖離になる。
+  // 未解決実装は twa=100（90% 乖離）・active が finalize 残差の unattributed 側で膨らみ、両 assertion で落ちる。
+  const fcEofHead = runMetrics([writeLog('fc-claude-eof-head', [
+    cUser(0, 'start'), cAssistantText(100, 'a'), cSystemTurn(1000, 1000),
+  ])]);
+  assertion('mc07-eof-head-resolved', s0(fcEofHead).turnWindowActiveMs === 1000 && s0(fcEofHead).turnWindowCheckMs === 1000 && s0(fcEofHead).activeMs === 1000 && s0(fcEofHead).userWaitMs === 0 && bd(fcEofHead).unattributedMs === 0, { twa: fcEofHead.json && s0(fcEofHead).turnWindowActiveMs, a: fcEofHead.json && s0(fcEofHead).activeMs, uw: fcEofHead.json && s0(fcEofHead).userWaitMs });
+  assertion('mc07-eof-head-invariant', invariantHolds(s0(fcEofHead)));
+
+  // (10) EOF 境界解決の tail 側: turn_duration 後に非 timeline イベント（メタ・queue-operation）だけが続く場合、
+  // turn 外の残尾 [1100,5000] は unattributed でなく userWait へ帰属する。
+  const fcEofTail = runMetrics([writeLog('fc-claude-eof-tail', [
+    cUser(0, 'start'), cAssistantText(1000, 'a'), cSystemTurn(1100, 1100),
+    { type: 'ai-title', title: 'x' },
+    { type: 'queue-operation', operation: 'enqueue', timestamp: iso(5000), content: 'x' },
+  ])]);
+  assertion('mc07-eof-tail-userwait', s0(fcEofTail).userWaitMs === 3900 && s0(fcEofTail).turnWindowActiveMs === 1100 && s0(fcEofTail).turnWindowCheckMs === 1100 && bd(fcEofTail).unattributedMs === 0, { uw: fcEofTail.json && s0(fcEofTail).userWaitMs, twa: fcEofTail.json && s0(fcEofTail).turnWindowActiveMs, un: fcEofTail.json && bd(fcEofTail) });
+  assertion('mc07-eof-tail-invariant', invariantHolds(s0(fcEofTail)));
+
   sessionMetricsRealTranscriptFixtures(dir, runMetrics, iso, invariantHolds, s0);
 }
 
@@ -1367,7 +1473,10 @@ function sessionMetricsRealTranscriptFixtures(dir, runMetrics, iso, invariantHol
   const realClaude = runMetrics([claudePath]);
   assertion('mc-real-claude-exit0-invariant', realClaude.status === 0 && invariantHolds(s0(realClaude)), { exit: realClaude.status });
   assertion('mc-real-claude-clean-quality', s0(realClaude).quality.unknownEvents === 0 && s0(realClaude).quality.skippedLines === 0, { q: realClaude.json && s0(realClaude).quality });
-  assertion('mc-real-claude-userwait-and-methodops', s0(realClaude).userWaitMs === 47000 && s0(realClaude).breakdown.methodOpsMs === 4000, { uw: realClaude.json && s0(realClaude).userWaitMs, m: realClaude.json && s0(realClaude).breakdown.methodOpsMs });
+  // turn_duration(13100) から次プロンプト(60000) までが turn 外 userWait（46900）、境界前 100ms は turn 内 LLM 生成。
+  // 窓 [0,13100] 内の active は durationMs と一致（実 transcript 構成での窓限定検算のゼロ乖離）。
+  assertion('mc-real-claude-userwait-and-methodops', s0(realClaude).userWaitMs === 46900 && s0(realClaude).breakdown.methodOpsMs === 4000, { uw: realClaude.json && s0(realClaude).userWaitMs, m: realClaude.json && s0(realClaude).breakdown.methodOpsMs });
+  assertion('mc-real-claude-turnwindow-zero-deviation', s0(realClaude).turnWindowActiveMs === s0(realClaude).turnDurationCheckMs && s0(realClaude).turnDurationCheckMs === 13100, { twa: realClaude.json && s0(realClaude).turnWindowActiveMs, tdc: realClaude.json && s0(realClaude).turnDurationCheckMs });
 
   // Codex: session_meta・turn_context・response_item(reasoning/message/function_call 対)・event_msg(task 境界・
   // mcp_tool_call_end・token_count)・world_state を保持した匿名抜粋。
