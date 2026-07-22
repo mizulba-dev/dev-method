@@ -809,7 +809,7 @@ function reviewRuntimeStaticFixtures() {
   const validator = (text) => text.includes('verify --review-dir') && text.includes('reviewer の spawn') && text.includes('source checker') && text.includes('単独起動する cross-review');
   assertion('rv01-claude-gate', validator(claude)); assertion('rv01-codex-gate', validator(codex));
   assertion('rv01-ask-gate-drift', !validator(claude.replace('verify --review-dir', 'verify-disabled')));
-  assertion('rv01-standalone-backward-compatible', cross.includes('standalone') && cross.includes('Ask では') && !cross.includes('standalone では tooling manifest'));
+  assertion('rv01-standalone-backward-compatible', cross.includes('standalone') && cross.includes('Seal では') && !cross.includes('standalone では tooling manifest'));
   const integratedReview = (text) => text.includes('全境界が揃ったら統合先へ')
     && text.includes('cherry-pick --no-commit') && text.includes('統合先の全diffへ**共同レビュー**を1回起動する');
   assertion('rv01-worktree-integrated-review-claude', integratedReview(claude));
@@ -900,9 +900,9 @@ function reviewParserFixtures() {
   expect('rv03-codex-verdict-findings-inconsistent', process.execPath, [reviewLogChecker, codexBad, '(^|\\s)(npm test|git commit)(\\s|$)', join(root, 'codex-bad.json')], root, 1);
 }
 
-function newFooter({ plan = 'レビュー計画1R・21分（R1 must0+should0+nit0）', code = 'レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0）', planLedger = 'ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true', codeLedger = 'ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true', planOutcome = 'R1 plan approved', codeOutcome = 'R1 code approved', e2e = 'E2E 44分', actual = '実働40分（手法運用10分）', prep = 'Evidence Package 準備2分（開始10:00・終了10:02；テスト5分）', classification = '4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0' } = {}) {
+function newFooter({ lane = 'Ask', plan = 'レビュー計画1R・21分（R1 must0+should0+nit0）', code = 'レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0）', planLedger = 'ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true', codeLedger = 'ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true', planOutcome = 'R1 plan approved', codeOutcome = 'R1 code approved', e2e = 'E2E 44分', actual = '実働40分（手法運用10分）', prep = 'Evidence Package 準備2分（開始10:00・終了10:02；テスト5分）', classification = '4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0' } = {}) {
   const actualSeg = actual ? ` ${actual} /` : '';
-  return `実測: レーンAsk / 担当fixture / ${plan} / ${code} / ${planLedger} / ${codeLedger} / ${planOutcome} / ${codeOutcome} / ${e2e} /${actualSeg} ${prep} / ${classification} / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`;
+  return `実測: レーン${lane} / 担当fixture / ${plan} / ${code} / ${planLedger} / ${codeLedger} / ${planOutcome} / ${codeOutcome} / ${e2e} /${actualSeg} ${prep} / ${classification} / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`;
 }
 
 function methodStatsFixtures() {
@@ -925,7 +925,7 @@ function methodStatsFixtures() {
   rows.forEach((row, index) => writeFileSync(join(directionDir, `2026-07-${String(index + 1).padStart(2, '0')}-fixture.md`), `${row}\n`));
   const result = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: home });
   const combined = `${result.stdout}\n${result.stderr}`;
-  const expected = ['Evidence新形式件数: 8', 'dogfood適格件数: 7', 'plan R1承認率（dogfood適格のみ）: 5/7 (71.4%)', 'code R1承認率（dogfood適格のみ）: 6/7 (85.7%)', 'plan平均レビュー分: 22.0', 'code平均レビュー分: 23.4', 'E2E平均分: 45.6', '実働記録件数: 6/8', '実働平均分: 40.0', '手法運用比率: 70/240 (29.2%)', 'Evidence Package準備平均分（テスト時間は含めない）: 2.0', 'R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: 1 / 0 / 0 / 0', 'plan ledgerの観測数/期待数/stale/eligibleが内部不一致', 'E2E時間がplan+codeと不整合', '実働欄文法外', '実働欄の手法運用が実働を超過', 'Evidence Package準備時間が開始・終了との差分と不整合', '4分類文法外', '4分類合計がcode R1固有/重複合計と不整合', '並列Ask件数（旧形式）: 1', 'smoke実施率: 1/12 (8.3%)', 'smoke記録不備: 未記載1件 / 文法外1件'];
+  const expected = ['Evidence新形式件数: 8', 'dogfood適格件数: 7', 'plan R1承認率（dogfood適格のみ）: 5/7 (71.4%)', 'code R1承認率（dogfood適格のみ）: 6/7 (85.7%)', 'plan平均レビュー分: 22.0', 'code平均レビュー分: 23.4', 'E2E平均分: 45.6', '実働記録件数（Show含む）: 6/8', '実働平均分: 40.0', '手法運用比率: 70/240 (29.2%)', 'Evidence Package準備平均分（テスト時間は含めない）: 2.0', 'R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: 1 / 0 / 0 / 0', 'plan ledgerの観測数/期待数/stale/eligibleが内部不一致', 'E2E時間がplan+codeと不整合', '実働欄文法外', '実働欄の手法運用が実働を超過', 'Evidence Package準備時間が開始・終了との差分と不整合', '4分類文法外', '4分類合計がcode R1固有/重複合計と不整合', '並列Ask件数（旧形式）: 1', 'smoke実施率: 1/12 (8.3%)', 'smoke記録不備: 未記載1件 / 文法外1件'];
   const passed = result.status === 0 && expected.every((value) => combined.includes(value));
   writeFileSync(join(logsRoot, 'ob01-method-stats.log'), combined);
   assertion('ob01-method-stats-new-old-and-drifts', passed, { exit: result.status, missing: expected.filter((value) => !combined.includes(value)) });
@@ -937,7 +937,30 @@ function methodStatsFixtures() {
   const miss = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: missHome });
   const missCombined = `${miss.stdout}\n${miss.stderr}`;
   const missExcludes = ['実働欄文法外', '実働欄の手法運用が実働を超過'];
-  assertion('ob01-actual-missing-no-warning', miss.status === 0 && missCombined.includes('実働記録件数: 0/2') && missCombined.includes('実働平均分: 該当なし') && missExcludes.every((value) => !missCombined.includes(value)), { exit: miss.status, present: missExcludes.filter((value) => missCombined.includes(value)) });
+  assertion('ob01-actual-missing-no-warning', miss.status === 0 && missCombined.includes('実働記録件数（Show含む）: 0/2') && missCombined.includes('実働平均分: 該当なし') && missExcludes.every((value) => !missCombined.includes(value)), { exit: miss.status, present: missExcludes.filter((value) => missCombined.includes(value)) });
+  // 4レーン混在: Sign / Seal / 旧 Ask のフッターが共存しても集計が壊れないことを固定。旧 Ask と Seal は Seal 系譜として
+  // dogfood 適格、Sign は ledger 欄・Evidence 欄が「対象外」で警告なし・dogfood 非適格。
+  const laneHome = join(runsRoot, 'ob01-lane-home'); rmSync(laneHome, { recursive: true, force: true });
+  const laneDir = join(laneHome, 'dev-notes/project/direction'); mkdirSync(laneDir, { recursive: true });
+  const signFooter = newFooter({ lane: 'Sign', planLedger: 'ledger plan 対象外', codeLedger: 'ledger code 対象外', prep: 'Evidence Package 対象外' });
+  [newFooter({ lane: 'Ask' }), newFooter({ lane: 'Seal' }), signFooter].forEach((row, index) => writeFileSync(join(laneDir, `2026-09-${String(index + 1).padStart(2, '0')}-lane.md`), `${row}\n`));
+  const lane = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: laneHome });
+  const laneCombined = `${lane.stdout}\n${lane.stderr}`;
+  const laneExpected = ['Evidence新形式件数: 3', 'dogfood適格件数: 2'];
+  const laneForbidden = ['新形式のレーン不一致', 'ledger欠落', 'Evidence Package準備時間欠落'];
+  assertion('ob01-lane-mixed-sign-seal-ask', lane.status === 0 && laneExpected.every((value) => laneCombined.includes(value)) && laneForbidden.every((value) => !laneCombined.includes(value)), { exit: lane.status, missing: laneExpected.filter((value) => !laneCombined.includes(value)), present: laneForbidden.filter((value) => laneCombined.includes(value)) });
+  // Show×実働: 実働欄はレーン不問で解析・集計する。Show 簡易フッターの実働欄が警告なしで集計へ算入され、実働欄なし
+  // Show は欠測（不算入）になることを固定。Show 簡易フッターは旧 serial 欄（差し戻し等）の警告も出さない（警告ゼロ）。
+  const showHome = join(runsRoot, 'ob01-show-actual-home'); rmSync(showHome, { recursive: true, force: true });
+  const showDir = join(showHome, 'dev-notes/project/direction'); mkdirSync(showDir, { recursive: true });
+  [
+    '実測: レーンShow / レビュー1R（R1 must0+should0） / 実働30分（手法運用8分） / smoke 対象外 / 逸脱: なし',
+    '実測: レーンShow / レビュー1R（R1 must0+should0） / smoke 対象外 / 逸脱: なし',
+  ].forEach((row, index) => writeFileSync(join(showDir, `2026-10-${String(index + 1).padStart(2, '0')}-show.md`), `${row}\n`));
+  const show = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: showHome });
+  const showCombined = `${show.stdout}\n${show.stderr}`;
+  const showExpected = ['実働記録件数（Show含む）: 1/0', '実働平均分: 30.0', '手法運用比率: 8/30 (26.7%)'];
+  assertion('ob01-show-actual-counted-no-warning', show.status === 0 && showExpected.every((value) => showCombined.includes(value)) && !showCombined.includes('警告:'), { exit: show.status, missing: showExpected.filter((value) => !showCombined.includes(value)), warnings: showCombined.includes('警告:') });
   const emptyHome = join(runsRoot, 'ob01-empty-home'); rmSync(emptyHome, { recursive: true, force: true }); mkdirSync(emptyHome, { recursive: true });
   const empty = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: emptyHome });
   assertion('ob01-dev-notes-missing', empty.status === 0 && empty.stdout.includes('~/dev-notes 不在'));

@@ -20,10 +20,10 @@ const CLAUSE_PAIRS = [
     regex: /Show ではプレレビューだけを単独起動し.*/,
   },
   {
-    id: 'Showプレレビュー: must\/should収束条件（team-impl両版）',
+    id: 'Showプレレビュー: must のみ1回化（team-impl両版）',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /Show のプレレビューは must-fix \/ should-fix がゼロに収束するまで.*/,
+    regex: /Show のプレレビューは1回で終了する.*/,
   },
   {
     id: 'Showプレレビュー: diff指紋対象外展開（team-impl両版）',
@@ -173,7 +173,13 @@ const CLAUSE_PAIRS = [
     id: '手順9: 実測フッターのテンプレート',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /実測: レーンAsk \/ 担当.*/,
+    regex: /実測: レーンSeal \/ 担当.*/,
+  },
+  {
+    id: '共同レビュー: Sign 各1回・Evidence/ledger なし（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /Sign では pre（プレレビュー）と cross（cross-review）を同じ開始時 diff 指紋へ各1回だけ起動し.*/,
   },
   {
     id: '手順9: 実働欄の記載点注記（team-impl両版）',
@@ -374,16 +380,16 @@ const CLAUSE_PAIRS = [
     regex: /高リスク role は、高リスク基準に触れる契約・ファイル・完了条件を最小の高リスク編集面へ分けて局所割り当てし.*?ブリーフ全体を `implementer-high` とする。/,
   },
   {
-    id: 'Ask smoke: 安定版への最終1回ゲート（direction ↔ team-impl claude）',
+    id: 'Seal smoke: 安定版への最終1回ゲート（direction ↔ team-impl claude）',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
-    regex: /Ask の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。/,
+    regex: /Seal の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。/,
   },
   {
-    id: 'Ask smoke: 安定版への最終1回ゲート（direction ↔ team-impl codex）',
+    id: 'Seal smoke: 安定版への最終1回ゲート（direction ↔ team-impl codex）',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /Ask の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。/,
+    regex: /Seal の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。/,
   },
   {
     id: 'implementer: 差し戻し再検証の影響範囲スコープ',
@@ -401,19 +407,19 @@ const CLAUSE_PAIRS = [
     id: 'Evidence: direction ↔ team-impl claude の固定作業単位・record・plan/code継続・footer契約',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
-    regex: /Evidence共有契約: Askでは canonical review-dir.*/,
+    regex: /Evidence共有契約: Sealでは canonical review-dir.*/,
   },
   {
     id: 'Evidence: direction ↔ team-impl codex の固定作業単位・record・plan/code継続・footer契約',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /Evidence共有契約: Askでは canonical review-dir.*/,
+    regex: /Evidence共有契約: Sealでは canonical review-dir.*/,
   },
   {
     id: 'Evidence: team-impl両版のcanonical作業単位入力',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /Ask の共同レビューでは、direction から引き継いだ canonical review-dir.*/,
+    regex: /Seal の共同レビューでは、direction から引き継いだ canonical review-dir.*/,
   },
   {
     id: 'Evidence: team-impl両版の固定checker verifyゲート',
@@ -446,10 +452,10 @@ const CLAUSE_PAIRS = [
     regex: /code ledger では各返却の `approve` を.*/,
   },
   {
-    id: 'Evidence: team-impl両版のAskゲート適用範囲',
+    id: 'Evidence: team-impl両版のSealゲート適用範囲',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /このゲートは team-impl が Ask の共同レビューとして呼ぶ経路だけに適用する.*/,
+    regex: /このゲートは team-impl が Seal の共同レビューとして呼ぶ経路だけに適用する.*/,
   },
   {
     id: 'Evidence: implementer両版のmanifest・record契約',

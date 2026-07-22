@@ -39,23 +39,27 @@ Show ではプレレビューだけを単独起動し、cross-review と diff �
 
 `reviewer` teammate は Agent tool で `subagent_type: "dev-method-claude:reviewer"`（model fable / effort high、`tools` で read-only 制限済み）を指定する。spawn prompt には `cross-review` の `references/review-prompt.md` の観点ブロック・変更範囲・検証証跡を渡し、`{{DIFF_FINGERPRINT}}` は `diff指紋: 対象外（Show）` へ置換する。「diff指紋: 対象外（Show）」が渡された場合は最終報告へそのまま返す。確信度の高い指摘だけを重大度順で求める。
 
-Show のプレレビューは must-fix / should-fix がゼロに収束するまで繰り返し、nit だけなら終了する。指摘は軽微なら直接修正し、それ以外は実装担当へ差し戻す。
+Show のプレレビューは1回で終了する（反復しない）。**must-fix だけ**を即対応し（軽微なら直接修正、それ以外は実装担当へ差し戻す）、should-fix / nit は蓄積して follow-up 1バッチへ回す。
 
 ## 共同レビュー（プレレビュー + cross-review）
 
 implementer の完了報告を受けたら共同レビューへ進む。
 
-### Ask の作業単位と起動前ゲート
+### Sign（pre + cross 各1回・Evidence/ledger なし）
 
-Evidence共有契約: Askでは canonical review-dir の絶対パス、tooling manifestの`format_version`・`review_unit_id`・固定diff指紋実装、全境界Evidence Packageを全worktree・全ラウンドで共有する。direction承認hashは固定checkerが`状態:`・`実測:`の各1行だけを除外して作る規範本文hashとし、この2行へ規範情報を書かない。完了条件のexit 0 baselineと、`--mutation`名・期待非ゼロexitを持つ故意ずれは固定checkerのrecordだけから各1件以上記録する。合意前計画レビューは更新後全文を全指摘ゼロまで再読、コード共同レビューR2以降は同じsession/threadを継続する。旧review unitの証跡・承認は転記せず、実測footerはplan/code/E2E/ledger/Evidence準備/4分類の固定文法を使う
+Sign では pre（プレレビュー）と cross（cross-review）を同じ開始時 diff 指紋へ各1回だけ起動し、統合裁定のうえ **must-fix を1バッチで修正**して機械ゲート green で出荷する（**修正後の再レビューはしない**。受け皿は機械ゲートと friction ループ）。Evidence Package・review-ledger・収束ループ・作業単位入力（canonical review-dir / tooling manifest / review_unit_id）は使わない。cross のログ機械判定（read-only 監査＝`references/check-review-log.mjs` による denylist 照合）と、検知器変更時の故意ずれ検体の実行検証は維持する。両結果は下記「共同レビュー」節の統合・裁定に従い、should-fix / nit は蓄積して follow-up 1バッチへ回す。
 
-Ask の共同レビューでは、direction から引き継いだ canonical review-dir の絶対パス、その配下の `tooling-manifest.json` の絶対パスと内容 SHA-256、固定 `review_unit_id` を作業単位入力とする。リーダーはこの組を全 worktree・全ラウンドへそのまま渡し、worker ごとに tooling をコピー・再生成したり `review_unit_id` を作り直したりしない。複数の `.work/` から最新・先頭を選ばず、`dev-method-claude` / `dev-method-codex` の兄弟プラグインやキャッシュ位置も推測しない。
+### Seal の作業単位と起動前ゲート
+
+Evidence共有契約: Sealでは canonical review-dir の絶対パス、tooling manifestの`format_version`・`review_unit_id`・固定diff指紋実装、全境界Evidence Packageを全worktree・全ラウンドで共有する。direction承認hashは固定checkerが`状態:`・`実測:`の各1行だけを除外して作る規範本文hashとし、この2行へ規範情報を書かない。完了条件のexit 0 baselineと、`--mutation`名・期待非ゼロexitを持つ故意ずれは固定checkerのrecordだけから各1件以上記録する。合意前計画レビューは更新後全文を全指摘ゼロまで再読、コード共同レビューR2以降は同じsession/threadを継続する。旧review unitの証跡・承認は転記せず、実測footerはplan/code/E2E/ledger/Evidence準備/4分類の固定文法を使う
+
+Seal の共同レビューでは、direction から引き継いだ canonical review-dir の絶対パス、その配下の `tooling-manifest.json` の絶対パスと内容 SHA-256、固定 `review_unit_id` を作業単位入力とする。リーダーはこの組を全 worktree・全ラウンドへそのまま渡し、worker ごとに tooling をコピー・再生成したり `review_unit_id` を作り直したりしない。複数の `.work/` から最新・先頭を選ばず、`dev-method-claude` / `dev-method-codex` の兄弟プラグインやキャッシュ位置も推測しない。
 
 R1 を含む各共同ラウンドの起動直前に、`tooling-manifest.json` の絶対パスから固定 checker・schema・diff 指紋実装を解決し、manifest 記録値とのパス・内容 SHA-256 と `review_unit_id` を再照合する。続けて `node <tooling-manifestのchecker絶対パス> verify --review-dir <canonical review-dir絶対パス> --direction <現行direction絶対パス> --manifest <境界manifest絶対パス> [--manifest ...]` を、全境界manifestを列挙して実行する。tooling manifest 欠落・固定コピーの欠落または hash 不一致・package manifest 欠落・stale 契約・実 diff の未対応・未復元の故意ずれ・未解決の automated 契約、または verify JSON の diff 指紋と固定 diff 指紋実装で計算した現行指紋の不一致は、reviewer の spawn と cross-review CLI の起動より前に fail-closed で停止する。source checker や worktree 個別コピーで代替せず、修復または stale 契約の再検証を担当 implementer へ戻す。
 
 verify が exit 0 のときだけ、verify JSON の全境界manifest絶対パスと内容 SHA-256、`review_unit_id`、direction 本文 SHA-256、現行 diff 指紋、およびmanifestから抽出したreview-required一覧をそのラウンドの固定入力にする。tooling manifest の絶対パス・内容 SHA-256も含め、プレレビューと cross-review の両方へ同じ値を渡す。Evidence Package は探索索引であって免責範囲ではないため、両者に diff 全体と必要な周辺コードを読み、契約漏れ・証拠の識別力・観測点の迂回・未モデル化リスクを確認させる。package 記載外を確認不要とは指示しない。
 
-このゲートは team-impl が Ask の共同レビューとして呼ぶ経路だけに適用する。Show のプレレビューと、セカンドオピニオンとして単独起動する cross-review に Ask 専用の tooling manifest / Evidence Package を要求しない。
+このゲートは team-impl が Seal の共同レビューとして呼ぶ経路だけに適用する。Show のプレレビューと、セカンドオピニオンとして単独起動する cross-review に Seal 専用の tooling manifest / Evidence Package を要求しない。
 
 provider の起動は初回を含め最大2試行とする。`400 model not supported` のときだけ同じ外部 CLI でモデル指定を外す既存経路へ進み、429・5xx・quota・unavailable のときだけ起動環境が列挙できる同じ外部モデルファミリーの別の利用可能な最上位モデルへ切り替える。これらは排他的に扱い、同じ失敗条件を反復しない。救出結果から全必須fieldを持つ正規化JSONを作り、schema・verdict/findings整合・diff指紋を検証できた場合だけproviderを再実行せず、それ未満は試行失敗として扱う。2試行目も失敗した、または適格な代替がない場合は fail-closed で停止する。ユーザーが単独レビューの継続を明示許可した場合だけ標準 code ledger を実行せず、承認発言・省略対象・理由を逸脱記録と非canonical footerへ残してパーサ警告を維持する。この縮退は作業継続を妨げないが、同一版二者承認・ledger eligible・dogfood適格を満たしたとは記録しない。
 
@@ -73,11 +77,11 @@ code ledger では各返却の `approve` を must-fix / should-fix ゼロ、`nee
 
 同じ開始時指紋に対して、`reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model fable / effort high、`tools` で read-only 制限済み）をバックグラウンド spawn し、その完了を待つ前に `cross-review` をバックグラウンド起動する。reviewer は implementer / implementer-high とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる。
 
-両レビューには同じ開始時 diff 指紋・計画ファイル・対象範囲・implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）・重点観点を渡す。Ask ではさらに、起動前ゲートで固定した tooling manifest と全境界manifestの絶対パス・内容 SHA-256、`review_unit_id`、review-required 一覧、direction 本文 SHA-256 も同一値で渡す。spawn prompt の基本観点は `cross-review` の `references/review-prompt.md` の観点ブロックと揃え、確信度の高い指摘のみを重大度順で求める。reviewer はテストを実行しない静的レビュー専任で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。reviewer の最終報告には開始時 diff 指紋を64桁小文字16進でそのまま返させる。
+両レビューには同じ開始時 diff 指紋・計画ファイル・対象範囲・implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）・重点観点を渡す。Seal ではさらに、起動前ゲートで固定した tooling manifest と全境界manifestの絶対パス・内容 SHA-256、`review_unit_id`、review-required 一覧、direction 本文 SHA-256 も同一値で渡す。spawn prompt の基本観点は `cross-review` の `references/review-prompt.md` の観点ブロックと揃え、確信度の高い指摘のみを重大度順で求める。reviewer はテストを実行しない静的レビュー専任で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。reviewer の最終報告には開始時 diff 指紋を64桁小文字16進でそのまま返させる。
 
 実行可能な検知器（テスト基盤・検証スクリプト・パーサ・品質ゲート）の変更では、direction の検証設計に列挙された故意ずれ検体と implementer の実行証跡を両レビューの起動指示へ含め、各失敗クラスが false green にならないか照合する。実行証跡が無い失敗クラスは should-fix とし、reviewer の権限を広げず implementer へ実行を差し戻す。共同ラウンド開始前に検体ファイル一式が作業ツリーに残っていることを確認し、欠けている検体は implementer へ再生成を差し戻す（異ベンダーの独立実行検証は残存する検体で再現できることが前提）。
 
-片方の結果だけで修正を始めず、両結果が揃うまで待つ。結果受領後、プレレビューの返却指紋、cross-review JSON の `diff_fingerprint`、固定 helper を再実行した現行 diff 指紋を開始時指紋と照合する。Ask では両結果受領イベントの `review_unit_id`・direction 本文 SHA-256・tooling manifest と全境界manifestの絶対パス・内容 SHA-256 も起動時入力と照合する。Ask でいずれかが不一致なら結果を承認・指摘処理に使わず、code ledger の exit 1 として次ラウンド判断も停止し、変更者・変更理由と帳簿を確認する。standalone では従来どおり現行差分からラウンドをやり直す。
+片方の結果だけで修正を始めず、両結果が揃うまで待つ。結果受領後、プレレビューの返却指紋、cross-review JSON の `diff_fingerprint`、固定 helper を再実行した現行 diff 指紋を開始時指紋と照合する。Seal では両結果受領イベントの `review_unit_id`・direction 本文 SHA-256・tooling manifest と全境界manifestの絶対パス・内容 SHA-256 も起動時入力と照合する。Seal でいずれかが不一致なら結果を承認・指摘処理に使わず、code ledger の exit 1 として次ラウンド判断も停止し、変更者・変更理由と帳簿を確認する。standalone では従来どおり現行差分からラウンドをやり直す。
 
 指摘の処理: 両結果を失敗シナリオ／根本原因単位へ正規化し、重複・プレ固有・cross固有・相反に分類してから採否を裁定する。相反や棄却判断に迷う場合は既存の advisor／fail-closed の経路を使う。両結果が揃う前に diff を変更せず、採用した must-fix / should-fix は一つの修正バッチにまとめ、軽微はリーダー直修正、それ以外は implementer へ差し戻す。修正後は以前の両承認を失効させ、更新後の同じ diff 指紋へ両レビューを再起動する。
 
@@ -106,10 +110,10 @@ nit はループの終了条件にせず、各ラウンドで検出された nit
 5. worktree分離時は全境界の完了報告を待ち、境界checkpointを統合先へ取り込んでEvidenceを正式生成・verifyした後、統合先の全diffへ**共同レビュー**を1回起動する。独立git repository境界だけは、他境界の実装と並行して境界単位にレビューしてよい。direction に追補があれば追補箇所を**重点観点として必ず渡す**。ブリーフに無い検証観点を思いついたときも、リーダーが自分で検証せず重点観点に足す
 6. レビュー実行中に並行して、リーダーが検証する: 完了報告の検証証跡（実行コマンド・exit code・pass/fail 件数）と diff の目視確認のみ行い、**完了条件コマンドの再実行はしない**。再実行は証跡が欠落している、または証跡と diff が矛盾する場合の抜き取り1回に限る。リーダー自身による追加の検証・補正の直列作業はしない（軽微の範囲を超える修正は implementer へ差し戻す）
 7. 両結果を揃えて指紋を照合し、**共同レビュー**節に従って根本原因単位で統合・裁定する。採用した must-fix / should-fix を一つの修正バッチで処理し、修正後は同じ更新版へ両レビューを再起動する。共同ラウンドの完了条件を満たすまでレビュー→修正を繰り返す
-8. レビュー収束後、コミット前に統合先で担当 implementer へ全量の完了条件コマンドを1回通し直させ、Evidenceのbaseline・故意ずれをrecordし直してverifyする。Ask の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。リーダーが1回実行し、新規実装が必要なら`未整備`として別follow-upへ分ける。smoke後に`git status`、固定checker verify、code ledger `before-completion`をこの順で実行し、diff変化・stale Evidence・帳簿不整合をfail-closedにする。失敗対応で追跡済みまたは非ignore未追跡diffが変われば共同レビューへ戻る。最終exit 0と`review-unit-complete.json`を確認してからリーダーがコミットする。ステージングは変更対象パスの明示指定で行い、`git add -A` / `git add .` を使わない
+8. レビュー収束後、コミット前に統合先で担当 implementer へ全量の完了条件コマンドを1回通し直させ、Evidenceのbaseline・故意ずれをrecordし直してverifyする。Seal の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。リーダーが1回実行し、新規実装が必要なら`未整備`として別follow-upへ分ける。smoke後に`git status`、固定checker verify、code ledger `before-completion`をこの順で実行し、diff変化・stale Evidence・帳簿不整合をfail-closedにする。失敗対応で追跡済みまたは非ignore未追跡diffが変われば共同レビューへ戻る。最終exit 0と`review-unit-complete.json`を確認してからリーダーがコミットする。ステージングは変更対象パスの明示指定で行い、`git add -A` / `git add .` を使わない
 9. 全タスク完了後、変更一覧・検証結果・レビュー指摘の処理結果を**報告様式**に従って要点のみで報告する。報告に実測フッターを1行含める（数値は概算でよい。direction がある場合はその完了記載にも転記する）:
 
-   `実測: レーンAsk / 担当<model/effort> / レビュー計画1R・21分（R1 must0+should0+nit0） / レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0） / ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true / ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true / R1 plan approved / R1 code approved / E2E 44分 / 実働30分（手法運用8分） / Evidence Package 準備2分（開始10:00・終了10:02；テスト5分） / 4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0 / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`
+   `実測: レーンSeal / 担当<model/effort> / レビュー計画1R・21分（R1 must0+should0+nit0） / レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0） / ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true / ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true / R1 plan approved / R1 code approved / E2E 44分 / 実働30分（手法運用8分） / Evidence Package 準備2分（開始10:00・終了10:02；テスト5分） / 4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0 / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`
 
    計画レビューとコード共同レビューは各ラウンドの開始から結果集約までの工程別壁時計を別々に記録し、`E2E`にはその合計を記録する。計画/コードのラウンド数、R1の区分別件数、pre/cross固有・重複、plan/code ledgerの必須2実行点・stale・eligible、plan/code R1 outcome、Evidence Package準備時間（開始・終了・内数のテスト時間）、レビュー指摘の4分類を固定順で持つ。固有／重複は must-fix / should-fix だけを根本原因単位で数え、nit は含めない。smoke は direction 検証設計の定型観点で要否を決めているため、完了報告の時点でテンプレートのいずれかの値に確定させる（評価不能の定義は direction の実測フッター規定に準じる）。実働欄は direction 完了時に session-metrics の実測で記載する（報告時は省略してよい）。
 

@@ -10,19 +10,19 @@
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents + `SubagentStop` 報告ゲート hook | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
-- `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Ask）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。レーンは着手時に判定・宣言する: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（小規模かつ `implementer-high` 基準・検知器変更に非該当）はプレレビュー収束のみで `cross-review` 省略、Ask（本筋・高リスク・検知器変更）は direction 起草＋フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
+- `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Sign / Seal）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。**レーンは爆発半径だけで判定・宣言し、direction の有無とは独立**（direction は設計合意の道具）: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（デフォルト）はプレレビュー**1回・must のみ**で `cross-review` 省略、Sign（高リスク・検知器の新設/変更）は pre+cross 各1回・統合裁定・must 1バッチ修正・再レビューなし、Seal（**不可逆×外部影響**が重なる変更のみ）は direction フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。追跡済み差分と非 ignore 未追跡を含む SHA-256 指紋を返し、standalone では開始時・返却値・結果受領時の同一性を確認して収束までループする
-- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。Codex は現在の `spawn_agent` schema が対応していれば `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする。schema に `agent_type` が無い未対応 runtime では、セッション開始前から定義が同期済みの場合に限り役割本文を同梱して縮退し、モデル配分不成立（親モデル継承）を記録する。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Ask では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Show のプレレビューのみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Ask の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
+- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。Codex は現在の `spawn_agent` schema が対応していれば `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする。schema に `agent_type` が無い未対応 runtime では、セッション開始前から定義が同期済みの場合に限り役割本文を同梱して縮退し、モデル配分不成立（親モデル継承）を記録する。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Sign は pre + cross を各1回だけ起動し、統合裁定して must-fix を1バッチ修正して出荷する（再レビューなし・Evidence/ledger なし）。Show のプレレビュー1回・must のみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
 
 ### Evidence Package
 
-Ask の Evidence Package は、direction で明示した既知契約と、その検証実行・ログ・対象差分を結び付ける**証拠索引**である。レビュー担当はこれを起点に確認を効率化できるが、形式証明でも完全性の保証でもない。二者の独立レビューは引き続き diff 全体と関連コードを読み、Package にモデル化されていないリスクや、証拠自体の妥当性も判断する。
+Seal の Evidence Package は、direction で明示した既知契約と、その検証実行・ログ・対象差分を結び付ける**証拠索引**である。レビュー担当はこれを起点に確認を効率化できるが、形式証明でも完全性の保証でもない。二者の独立レビューは引き続き diff 全体と関連コードを読み、Package にモデル化されていないリスクや、証拠自体の妥当性も判断する。
 
 したがって、Package にないコードを確認不要とは扱わず、Package が green であってもレビューの読解責務を免除しない。
 
 - Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ role と実行 model を含む終了通知を出す（model 欠損入力では role のみ）。実行中は既存の Active 表示で確認する
 - Claude Code の `SubagentStop` 報告ゲート hook — サブエージェント自身の transcript（`agent_transcript_path`）で、最新の非meta user実作業指示、または `origin.kind` が `coordinator` のmeta user指示より後だけを判定する。それ以外のmeta reminderとtool_resultは指示境界にしない。`agent_type` が完全一致で `dev-method-claude:reviewer` のときは `レビュー完了報告:`・`diff指紋:`・`指摘:`・`承認可否:`、それ以外は `完了報告:`・`検証証跡:`・`逸脱:`・`未達事項:` を各行頭に持つ `SendMessage` が必要。本文は `input.message`、無ければ文字列の `input.content` だけを読み、`summary` / `to` は判定に使わない。Show reviewer は `diff指紋: 対象外（Show）` とする。再入時（`stop_hook_active`）はブロックせず、入力パース不能・transcript 不在・認識可能行ゼロは fail-open（判定不能として続行）
-- `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。固定スクリプト `references/session-metrics.mjs` で時間内訳を決定論的に集計する。Ask 完了時は direction の工程として必須実行し（実働欄を実測確定）、それ以外は「時間がかかった」と感じたときの主観トリガーで呼ぶ。スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
+- `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。固定スクリプト `references/session-metrics.mjs` で時間内訳を決定論的に集計する。direction を書いた作業の完了記載時は必須実行し（レーン非依存。実働欄を実測確定）、それ以外は「時間がかかった」と感じたときの主観トリガーで呼ぶ。スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
 - `scenario-kit` — Playwright 録画を軸にした3用途ツール: ブランド付きデモ動画（`run`）、リリースノート・ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`。ランタイム異常検知＋証跡を残す）。1つのシナリオを3用途へ使い回すのが基本形で、接続先が異なる場合だけ `<name>-local.json` 等の変種に分ける
 
@@ -65,16 +65,17 @@ codex plugin add dev-method-codex@mizulba-dev
 
 ## セットアップ: 実装レーンの常駐トリガー
 
-スキルはロードされて初めて効くため、`direction` を起動しない小タスク（Ship / Show）にレーン判定を効かせるには、常時ロードされるグローバル設定への追記が必要（初回のみ・配布物に乗らない）。`~/.claude/CLAUDE.md`（Claude Code）と `~/.codex/AGENTS.md`（Codex）へ以下を追記する:
+スキルはロードされて初めて効くため、`direction` を起動しないタスク（Ship / Show / Sign。レーンは direction の有無と独立）にレーン判定を効かせるには、常時ロードされるグローバル設定への追記が必要（初回のみ・配布物に乗らない）。`~/.claude/CLAUDE.md`（Claude Code）と `~/.codex/AGENTS.md`（Codex）へ以下を追記する:
 
 ```markdown
 ## 実装レーン
 
-実装・修正の依頼を受けたら、着手前にレーンを1行宣言してから作業する（判定の正本は dev-method の `direction` スキル）:
+実装・修正の依頼を受けたら、着手前にレーンを1行宣言してから作業する（判定の正本は dev-method の `direction` スキル）。**レーンは爆発半径だけで決め、direction の有無とは独立**（direction は設計合意の道具であり、書いても実装工程は重くならない）。**Show は原義（マージ後の事後レビュー）でなく「出荷前の1回レビュー」を指す**:
 
 - **Ship**（挙動に触れない: typo・docs・コメント・ログ文言・依存 patch 更新・自明な設定値変更）: 直接実装し、機械ゲート（lint・build・該当テスト）のみ。レビューなし
-- **Show**（数ファイル・±100行未満、高リスク基準*に触れず、検知器の新設・変更でもない）: 直接実装し、プレレビューを must-fix / should-fix ゼロまで。Codex は現在の `spawn_agent` schema に `agent_type` があり `reviewer` が利用可能 role に見えれば `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` が無い環境では3 role 定義がセッション開始前から同期済みの場合に限り reviewer TOML の役割本文を同梱し、モデル配分不成立（親モデル継承）を記録する。role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更ではリポジトリroot・worktree root・モノレポ配下を探索し、既存シナリオの有無にかかわらず既存・軽微な変種または最小scenarioを準備して `scenario-kit smoke` を実走する。scenario差分も規模へ含め、超過時はAskへ昇格する。実測は `smoke <PASS|FAIL n件|評価不能|対象外>` とし、UI変更では `未整備` を使わない（UI非変更は `対象外`）
-- **Ask**（それ以外、高リスク基準*、検知器の新設・変更）: `direction` スキルを起動して計画から
+- **Show（デフォルト）**（下位2レーンの基準に触れないすべて）: 直接実装 → 機械ゲート → プレレビュー**1回**（**must-fix のみ即対応**、should-fix / nit は蓄積して follow-up 1バッチ）。Codex は現在の `spawn_agent` schema に `agent_type` があり `reviewer` が利用可能 role に見えれば `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` が無い環境では3 role 定義がセッション開始前から同期済みの場合に限り reviewer TOML の役割本文を同梱し、モデル配分不成立（親モデル継承）を記録する。role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更ではリポジトリroot・worktree root・モノレポ配下を探索し、既存シナリオの有無にかかわらず既存・軽微な変種または最小scenarioを準備して `scenario-kit smoke` を実走する。実測は `smoke <PASS|FAIL n件|評価不能|対象外>` とし、UI変更では `未整備` を使わない（UI非変更は `対象外`）
+- **Sign**（高リスク基準*に触れる、または検知器の新設・変更）: 実装 → 機械ゲート（検知器タスクは実データ・実ログ×不変式のハーネスをここに）→ pre + cross を各1回 → 統合裁定 → must-fix を1バッチ修正 → 機械ゲート green で出荷（**修正後の再レビューなし**）。cross のログ機械判定と故意ずれ検体の実行検証は維持。Evidence Package・ledger・収束ループは使わない
+- **Seal**（**不可逆**＝復旧不能なデータ変更・削除・公開後取り消し不能 ×**外部影響**＝公開 API・課金・第三者データ が**重なる**変更のみ）: `direction` を起草しフルパイプ（合意前計画レビュー・二者承認までの収束・Evidence Package・ledger）
 - *高リスク基準 = DB migration・並行処理・認可・セキュリティ・境界間契約
 - 迷ったら重い側のレーンに倒す。ユーザーがレーンを明示指定したら判定を省略する
 ```

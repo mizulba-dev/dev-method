@@ -1,6 +1,6 @@
 ---
 name: method-check
-description: セッションの時間内訳と運用摩擦を固定スクリプトで実測する開発運用チェック。Ask 完了時は direction の工程として必須実行し、それ以外は「時間がかかった」と感じたときの主観トリガーで呼び、問題があれば friction ログへ記録する
+description: セッションの時間内訳と運用摩擦を固定スクリプトで実測する開発運用チェック。direction を書いた作業の完了記載時は必須実行し（レーン非依存）、それ以外は「時間がかかった」と感じたときの主観トリガーで呼び、問題があれば friction ログへ記録する
 argument-hint: [セッションID]
 ---
 
@@ -8,14 +8,16 @@ argument-hint: [セッションID]
 
 トリガーは2系統ある:
 
-- **Ask 完了時は必須実行**。direction 完了記載の工程としてリーダーセッションを実測し、実働欄を確定する（direction スキル完了節の手順が本チェックを呼ぶ）。
-- **それ以外は主観トリガー**（時間がかかった・回り方が悪かった）。Show / Ship と Ask 以外の場面で体感の悪かったセッションをその場で精査する。自動・定期では回さない。
+- **direction を書いた作業の完了記載時は必須実行**（レーン非依存。Show / Sign / Seal のどれでも direction があれば対象）。direction 完了記載の工程としてリーダーセッションを実測し、実働欄を確定する（direction スキル完了節の手順が本チェックを呼ぶ）。
+- **それ以外は主観トリガー**（時間がかかった・回り方が悪かった）。direction の無い作業で体感の悪かったセッションをその場で精査する。自動・定期では回さない。
 
 体感で原因を決めつけず、`references/session-metrics.mjs` の実測 JSON から時間内訳を出してから問題を特定する。
 
+必須実測の記載先はレーンのフッター型に従う（採用条件は共通＝`skippedLines`・`unknownEvents`・`orphanToolUses` が各1%未満、かつ検算値が非 null なら乖離 ≦10%）: **Show** は簡易フッターの実働欄 `実働<N>分（手法運用<N>分）`、**Sign / Seal** は Ask 型文法フッターの実働欄。採用条件を満たさなければどのレーンでも省略（欠測）。
+
 ## 対象セッションの解決
 
-必須実測（Ask）の対象は **direction 完了記載を実行中のリーダーセッション**とする。起草・実装が別セッションに分かれ、そのログパスが判明していれば `--session` で追加してよい。不明分は対象外と報告に明記する。teammate / subagent transcript は自動探索しない（委譲先の内訳が要るなら follow-up）。
+必須実測（direction を書いた作業の完了記載時）の対象は **direction 完了記載を実行中のリーダーセッション**とする。起草・実装が別セッションに分かれ、そのログパスが判明していれば `--session` で追加してよい。不明分は対象外と報告に明記する。teammate / subagent transcript は自動探索しない（委譲先の内訳が要るなら follow-up）。
 
 1. $ARGUMENTS にセッション ID があれば、Claude は `~/.claude/projects/*/<ID>.jsonl`、Codex は `~/.codex/sessions/**/rollout-*<ID>.jsonl` から探す。ファイル名で見つからない Codex ログは `session_meta.payload.id` / `session_id` も照合する
 2. 引数が無ければ**実行中のこのセッション**を選ぶ:

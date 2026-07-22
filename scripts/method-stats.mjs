@@ -19,6 +19,10 @@ const OUTCOME_GRAMMAR = {
   code: new Set(['approved', 'findings', 'verdict_missing', 'stale_approved_diff']),
 };
 const CLASSIFICATION_GRAMMAR = /^4分類 plan-escape(\d+)\+implementation-deviation(\d+)\+evidence-gap(\d+)\+new-risk(\d+)$/;
+// 4レーン: Evidence 型フッターは Sign / Seal（旧 Ask を Seal 系譜として読む）。Seal 系譜だけが ledger を持ち dogfood 適格。
+// Sign は ledger 欄・Evidence 欄を「対象外」と記載し、それらの検証を警告なしでスキップする。
+const EVIDENCE_LANES = new Set(['Ask', 'Sign', 'Seal']);
+const SEAL_LINEAGE = new Set(['Ask', 'Seal']);
 
 function listDirectionFiles() {
   const files = [];
@@ -134,14 +138,16 @@ export function parseFooter(body) {
       continue;
     }
     if (/^レビューコード/.test(seg)) { row.newFormat = true; row.code.invalid = true; warnings.push('コードレビュー文法外'); continue; }
-    if (/^ledger plan /.test(seg)) { row.newFormat = true; parseLedger(seg, 'plan', row, warnings); continue; }
-    if (/^ledger code /.test(seg)) { row.newFormat = true; parseLedger(seg, 'code', row, warnings); continue; }
+    if (/^ledger plan /.test(seg)) { row.newFormat = true; if (seg === 'ledger plan 対象外') row.plan.ledgerNA = true; else parseLedger(seg, 'plan', row, warnings); continue; }
+    if (/^ledger code /.test(seg)) { row.newFormat = true; if (seg === 'ledger code 対象外') row.code.ledgerNA = true; else parseLedger(seg, 'code', row, warnings); continue; }
     if ((m = seg.match(/^R1 plan (\S+)$/))) { row.newFormat = true; row.plan.outcome = m[1]; continue; }
     if ((m = seg.match(/^R1 code (\S+)$/))) { row.newFormat = true; row.code.outcome = m[1]; continue; }
     if ((m = seg.match(/^E2E (\d+)分$/))) { row.newFormat = true; row.e2eMinutes = Number(m[1]); continue; }
     if (/^E2E /.test(seg)) { row.newFormat = true; warnings.push('E2E文法外'); continue; }
-    if ((m = seg.match(/^実働(\d+)分（手法運用(\d+)分）$/))) { row.newFormat = true; row.actualMinutes = Number(m[1]); row.methodOpsMinutes = Number(m[2]); continue; }
-    if (/^実働/.test(seg)) { row.newFormat = true; row.actualInvalid = true; warnings.push('実働欄文法外'); continue; }
+    // 実働欄はレーン不問（Show 簡易フッターにも載る）。newFormat 判定には関与させない。
+    if ((m = seg.match(/^実働(\d+)分（手法運用(\d+)分）$/))) { row.actualMinutes = Number(m[1]); row.methodOpsMinutes = Number(m[2]); continue; }
+    if (/^実働/.test(seg)) { row.actualInvalid = true; warnings.push('実働欄文法外'); continue; }
+    if (seg === 'Evidence Package 対象外') { row.newFormat = true; row.evidenceNA = true; continue; }
     if ((m = seg.match(/^Evidence Package 準備(\d+)分（開始(\d{2}:\d{2})・終了(\d{2}:\d{2})；テスト(\d+)分）$/))) {
       row.newFormat = true;
       row.evidencePrepMinutes = Number(m[1]); row.evidencePrepStart = m[2]; row.evidencePrepEnd = m[3]; row.evidenceTestMinutes = Number(m[4]);
@@ -184,36 +190,43 @@ export function parseFooter(body) {
     if ([row.plan.must, row.plan.should, row.plan.nit].some((value) => value == null)) warnings.push('plan R1 3区分件数欠落');
     if (row.e2eMinutes == null) warnings.push('E2E時間欠落');
     else if (row.plan.minutes != null && row.code.minutes != null && row.e2eMinutes !== row.plan.minutes + row.code.minutes) warnings.push('E2E時間がplan+codeと不整合');
-    // 実働欄は欠測（null かつ非文法外）を警告なしで許容する。文法外・制約違反（手法運用>実働）だけ警告して集計から除外する。
-    if (row.actualMinutes != null && row.methodOpsMinutes != null && row.methodOpsMinutes > row.actualMinutes) { warnings.push('実働欄の手法運用が実働を超過'); row.actualInvalid = true; }
-    row.actualEligible = row.actualMinutes != null && row.methodOpsMinutes != null && !row.actualInvalid;
-    if (row.evidencePrepMinutes == null) warnings.push('Evidence Package準備時間欠落');
+    if (row.evidencePrepMinutes == null && !row.evidenceNA) warnings.push('Evidence Package準備時間欠落');
     row.code.breakdownEligible = validateCodeBreakdown(row, warnings);
     if (!row.classification) warnings.push('4分類欠落');
     else if (!row.code.breakdownEligible || row.classification.reduce((total, value) => total + value, 0) !== row.code.uniquePre + row.code.uniqueCross + row.code.duplicate) {
       warnings.push('4分類合計がcode R1固有/重複合計と不整合');
       row.classification = null;
     }
-    row.plan.ledgerEligible = validateLedger('plan', row, warnings);
-    row.code.ledgerEligible = validateLedger('code', row, warnings);
+    // Sign は ledger を持たない（対象外）。検証・適格判定をスキップし警告しない。Seal 系譜（Ask/Seal）だけが ledger 適格・dogfood 適格。
+    row.plan.ledgerEligible = row.plan.ledgerNA ? false : validateLedger('plan', row, warnings);
+    row.code.ledgerEligible = row.code.ledgerNA ? false : validateLedger('code', row, warnings);
     row.plan.outcomeEligible = validateOutcome('plan', row, warnings);
     row.code.outcomeEligible = validateOutcome('code', row, warnings);
-    row.dogfoodEligible = row.lane === 'Ask' && row.plan.ledgerEligible && row.code.ledgerEligible;
-    if (row.lane !== 'Ask') warnings.push(`新形式のレーン不一致: ${row.lane ?? '欠落'}（Ask必須）`);
+    row.dogfoodEligible = SEAL_LINEAGE.has(row.lane) && row.plan.ledgerEligible && row.code.ledgerEligible;
+    if (!EVIDENCE_LANES.has(row.lane)) warnings.push(`新形式のレーン不一致: ${row.lane ?? '欠落'}（Sign/Seal 必須、旧 Ask は Seal 系譜）`);
   } else {
-    if (row.roundCount == null) warnings.push('R数を抽出できず');
-    if (row.reverts == null) warnings.push('差し戻し数を抽出できず');
-    if (row.directFixes == null) warnings.push('リーダー直修正数を抽出できず');
-    if (row.addenda == null) warnings.push('追補数を抽出できず');
-    if (row.deviation == null) warnings.push('逸脱欄を抽出できず');
+    // 旧 serial-Seal 形式のみ serial 欄（差し戻し・直修正・追補・R数・R1内訳）を要求する。Show / Ship の簡易フッターは
+    // これらを持たないため警告しない（旧形式のまま許容）。
+    const serialLane = row.lane !== 'Show' && row.lane !== 'Ship';
+    if (serialLane) {
+      if (row.roundCount == null) warnings.push('R数を抽出できず');
+      if (row.reverts == null) warnings.push('差し戻し数を抽出できず');
+      if (row.directFixes == null) warnings.push('リーダー直修正数を抽出できず');
+      if (row.addenda == null) warnings.push('追補数を抽出できず');
+      if (row.deviation == null) warnings.push('逸脱欄を抽出できず');
+    }
     if (row.reviewMode === '並列') {
       if (row.reviewMinutes == null) warnings.push('並列レビュー分欠落');
       if ([row.preMust, row.preShould, row.crossMust, row.crossShould, row.uniquePre, row.uniqueCross, row.duplicate].some((value) => value == null)) warnings.push('並列R1内訳欠落');
       if (!row.parallelValid) warnings.push('並列レビュー文法外（並列集計から除外）');
-      if (row.lane !== 'Ask') warnings.push(`並列レビューのレーン不一致: ${row.lane ?? '欠落'}（レーンAsk必須、並列集計から除外）`);
-      row.parallelEligible = row.parallelValid && row.lane === 'Ask';
-    } else if (!row.r1) warnings.push('R1内訳欠落');
+      if (!SEAL_LINEAGE.has(row.lane)) warnings.push(`並列レビューのレーン不一致: ${row.lane ?? '欠落'}（Ask/Seal 必須、並列集計から除外）`);
+      row.parallelEligible = row.parallelValid && SEAL_LINEAGE.has(row.lane);
+    } else if (serialLane && !row.r1) warnings.push('R1内訳欠落');
   }
+  // 実働欄はレーン不問で有効判定する（Show 簡易フッター含む）。欠測（null かつ非文法外）は警告なし。文法外・制約違反
+  // （手法運用>実働）だけ警告して集計から除外する。
+  if (row.actualMinutes != null && row.methodOpsMinutes != null && row.methodOpsMinutes > row.actualMinutes) { warnings.push('実働欄の手法運用が実働を超過'); row.actualInvalid = true; }
+  row.actualEligible = row.actualMinutes != null && row.methodOpsMinutes != null && !row.actualInvalid;
   if (row.qa != null && !QA_GRAMMAR.test(row.qa)) warnings.push(`QA値が文法外: ${row.qa}`);
   if (row.smoke != null && !SMOKE_GRAMMAR.test(row.smoke)) warnings.push(`smoke値が文法外: ${row.smoke}`);
   if (row.qa != null && row.smoke != null) warnings.push('QA欄とsmoke欄が同一フッターに両方存在');
@@ -241,7 +254,7 @@ function collectFooters(files) {
         '固有(pre/cross)': row.uniquePre != null ? `${row.uniquePre}/${row.uniqueCross}` : '—', 重複: row.duplicate ?? '—',
         差し戻し: row.reverts ?? '?', 直修正: row.directFixes ?? '?', '追補(契約)': row.addenda != null ? `${row.addenda}(${row.addendaContracts ?? '?'})` : '?',
         'QA(旧)': row.qa ?? '—', smoke: row.smoke ?? '—', 逸脱有無: row.deviation && row.deviation !== 'なし' ? '有' : '無',
-        parallel: row.parallelEligible ? row : null, evidence: row.newFormat ? row : null, location,
+        parallel: row.parallelEligible ? row : null, evidence: row.newFormat ? row : null, parsed: row, location,
       });
       for (const warning of warnings) parseWarnings.push(`パース不完全 ${location}: ${warning}`);
     });
@@ -302,8 +315,9 @@ function main() {
   console.log(`- plan平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.plan.minutes != null).map((row) => row.evidence.plan.minutes))}`);
   console.log(`- code平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.code.minutes != null).map((row) => row.evidence.code.minutes))}`);
   console.log(`- E2E平均分: ${average(e2eRows.map((row) => row.evidence.e2eMinutes))}`);
-  const actual = aggregateActual(evidenceRows.map((row) => row.evidence));
-  console.log(`- 実働記録件数: ${actual.recorded}/${actual.total}`);
+  // 実働欄はレーン不問（Show 簡易フッター含む）。集計対象は実働欄を持つ全レーンの有効行。カバレッジ分母は Evidence 系件数を維持。
+  const actual = aggregateActual(rows.map((row) => row.parsed));
+  console.log(`- 実働記録件数（Show含む）: ${actual.recorded}/${evidenceRows.length}`);
   console.log(`- 実働平均分: ${actual.average == null ? '該当なし' : actual.average.toFixed(1)}`);
   console.log(`- 手法運用比率: ${actual.ratio == null ? '該当なし' : ratio(actual.methodOpsSum, actual.actualSum)}`);
   console.log(`- Evidence Package準備平均分（テスト時間は含めない）: ${average(preparedRows.map((row) => row.evidence.evidencePrepMinutes))}`);
