@@ -18,7 +18,9 @@ const logsRoot = join(workRoot, 'logs');
 const sourceChecker = join(repoRoot, 'src/plugin/skills/direction/references/check-evidence-package.mjs');
 const reviewLogChecker = join(repoRoot, 'src/plugin/skills/cross-review/references/check-review-log.mjs');
 const methodStats = join(repoRoot, 'scripts/method-stats.mjs');
+const sessionMetrics = join(repoRoot, 'src/plugin/skills/method-check/references/session-metrics.mjs');
 const waitUsage = join(repoRoot, 'scripts/check-wait-usage.mjs');
+const BREAKDOWN_KEYS_FX = ['llmGenerationMs', 'methodOpsMs', 'toolExecutionMs', 'delegationWaitMs', 'unattributedMs'];
 const results = [];
 
 if (process.argv[2] === '--root-probe') {
@@ -898,8 +900,9 @@ function reviewParserFixtures() {
   expect('rv03-codex-verdict-findings-inconsistent', process.execPath, [reviewLogChecker, codexBad, '(^|\\s)(npm test|git commit)(\\s|$)', join(root, 'codex-bad.json')], root, 1);
 }
 
-function newFooter({ plan = 'レビュー計画1R・21分（R1 must0+should0+nit0）', code = 'レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0）', planLedger = 'ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true', codeLedger = 'ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true', planOutcome = 'R1 plan approved', codeOutcome = 'R1 code approved', e2e = 'E2E 44分', prep = 'Evidence Package 準備2分（開始10:00・終了10:02；テスト5分）', classification = '4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0' } = {}) {
-  return `実測: レーンAsk / 担当fixture / ${plan} / ${code} / ${planLedger} / ${codeLedger} / ${planOutcome} / ${codeOutcome} / ${e2e} / ${prep} / ${classification} / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`;
+function newFooter({ plan = 'レビュー計画1R・21分（R1 must0+should0+nit0）', code = 'レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0）', planLedger = 'ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true', codeLedger = 'ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true', planOutcome = 'R1 plan approved', codeOutcome = 'R1 code approved', e2e = 'E2E 44分', actual = '実働40分（手法運用10分）', prep = 'Evidence Package 準備2分（開始10:00・終了10:02；テスト5分）', classification = '4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0' } = {}) {
+  const actualSeg = actual ? ` ${actual} /` : '';
+  return `実測: レーンAsk / 担当fixture / ${plan} / ${code} / ${planLedger} / ${codeLedger} / ${planOutcome} / ${codeOutcome} / ${e2e} /${actualSeg} ${prep} / ${classification} / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`;
 }
 
 function methodStatsFixtures() {
@@ -907,13 +910,13 @@ function methodStatsFixtures() {
   const directionDir = join(home, 'dev-notes/project/direction'); mkdirSync(directionDir, { recursive: true });
   const rows = [
     newFooter(),
-    newFooter({ plan: 'レビュー計画2R・25分（R1 must0+should0+nit0）', planLedger: 'ledger plan 結果受領2/2・合意直前2/2・stale1・eligible=true', planOutcome: 'R1 plan stale_approved_plan', e2e: 'E2E 48分' }),
-    newFooter({ plan: 'レビュー計画2R・25分（R1 must1+should0+nit0）', code: 'レビューコード2R・26分（R1 pre must1+should0；cross must0+should0；固有 pre1+cross0；重複0）', planLedger: 'ledger plan 結果受領2/2・合意直前1/1・stale0・eligible=true', codeLedger: 'ledger code 両結果受領2/2・完了直前1/1・stale0・eligible=true', planOutcome: 'R1 plan findings', codeOutcome: 'R1 code findings', e2e: 'E2E 51分', classification: '4分類 plan-escape1+implementation-deviation0+evidence-gap0+new-risk0' }),
+    newFooter({ plan: 'レビュー計画2R・25分（R1 must0+should0+nit0）', planLedger: 'ledger plan 結果受領2/2・合意直前2/2・stale1・eligible=true', planOutcome: 'R1 plan stale_approved_plan', e2e: 'E2E 48分', actual: '実働60分（手法運用30分）' }),
+    newFooter({ plan: 'レビュー計画2R・25分（R1 must1+should0+nit0）', code: 'レビューコード2R・26分（R1 pre must1+should0；cross must0+should0；固有 pre1+cross0；重複0）', planLedger: 'ledger plan 結果受領2/2・合意直前1/1・stale0・eligible=true', codeLedger: 'ledger code 両結果受領2/2・完了直前1/1・stale0・eligible=true', planOutcome: 'R1 plan findings', codeOutcome: 'R1 code findings', e2e: 'E2E 51分', classification: '4分類 plan-escape1+implementation-deviation0+evidence-gap0+new-risk0', actual: '実働20分（手法運用0分）' }),
     newFooter({ planLedger: 'ledger plan 結果受領0/1・合意直前1/1・stale0・eligible=true' }),
     newFooter({ e2e: 'E2E 99分' }),
     newFooter({ prep: 'Evidence Package 準備3分（開始10:00・終了10:02；テスト5分）' }),
-    newFooter({ classification: '4分類 broken' }),
-    newFooter({ classification: '4分類 plan-escape1+implementation-deviation1+evidence-gap0+new-risk0' }),
+    newFooter({ classification: '4分類 broken', actual: '実働abc' }),
+    newFooter({ classification: '4分類 plan-escape1+implementation-deviation1+evidence-gap0+new-risk0', actual: '実働10分（手法運用20分）' }),
     '実測: レーンAsk / 担当x / レビュー並列1R・10分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0） / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし',
     '実測: レーンShip / smoke PASS',
     '実測: レーンShip / 逸脱: なし',
@@ -922,10 +925,19 @@ function methodStatsFixtures() {
   rows.forEach((row, index) => writeFileSync(join(directionDir, `2026-07-${String(index + 1).padStart(2, '0')}-fixture.md`), `${row}\n`));
   const result = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: home });
   const combined = `${result.stdout}\n${result.stderr}`;
-  const expected = ['Evidence新形式件数: 8', 'dogfood適格件数: 7', 'plan R1承認率（dogfood適格のみ）: 5/7 (71.4%)', 'code R1承認率（dogfood適格のみ）: 6/7 (85.7%)', 'plan平均レビュー分: 22.0', 'code平均レビュー分: 23.4', 'E2E平均分: 45.6', 'Evidence Package準備平均分（テスト時間は含めない）: 2.0', 'R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: 1 / 0 / 0 / 0', 'plan ledgerの観測数/期待数/stale/eligibleが内部不一致', 'E2E時間がplan+codeと不整合', 'Evidence Package準備時間が開始・終了との差分と不整合', '4分類文法外', '4分類合計がcode R1固有/重複合計と不整合', '並列Ask件数（旧形式）: 1', 'smoke実施率: 1/12 (8.3%)', 'smoke記録不備: 未記載1件 / 文法外1件'];
+  const expected = ['Evidence新形式件数: 8', 'dogfood適格件数: 7', 'plan R1承認率（dogfood適格のみ）: 5/7 (71.4%)', 'code R1承認率（dogfood適格のみ）: 6/7 (85.7%)', 'plan平均レビュー分: 22.0', 'code平均レビュー分: 23.4', 'E2E平均分: 45.6', '実働記録件数: 6/8', '実働平均分: 40.0', '手法運用比率: 70/240 (29.2%)', 'Evidence Package準備平均分（テスト時間は含めない）: 2.0', 'R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: 1 / 0 / 0 / 0', 'plan ledgerの観測数/期待数/stale/eligibleが内部不一致', 'E2E時間がplan+codeと不整合', '実働欄文法外', '実働欄の手法運用が実働を超過', 'Evidence Package準備時間が開始・終了との差分と不整合', '4分類文法外', '4分類合計がcode R1固有/重複合計と不整合', '並列Ask件数（旧形式）: 1', 'smoke実施率: 1/12 (8.3%)', 'smoke記録不備: 未記載1件 / 文法外1件'];
   const passed = result.status === 0 && expected.every((value) => combined.includes(value));
   writeFileSync(join(logsRoot, 'ob01-method-stats.log'), combined);
   assertion('ob01-method-stats-new-old-and-drifts', passed, { exit: result.status, missing: expected.filter((value) => !combined.includes(value)) });
+  // 欠測の 0 化 fail-open の反証: 実働欄なしフッターのみの専用 home で、実働関連警告が出力に現れないことを
+  // negative assertion（output-excludes）で確認し、実働記録件数が 0/N・欠測が平均へ不算入であることを確認する。
+  const missHome = join(runsRoot, 'ob01-actual-missing-home'); rmSync(missHome, { recursive: true, force: true });
+  const missDir = join(missHome, 'dev-notes/project/direction'); mkdirSync(missDir, { recursive: true });
+  [newFooter({ actual: null }), newFooter({ actual: null, e2e: 'E2E 48分' })].forEach((row, index) => writeFileSync(join(missDir, `2026-08-${String(index + 1).padStart(2, '0')}-miss.md`), `${row}\n`));
+  const miss = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: missHome });
+  const missCombined = `${miss.stdout}\n${miss.stderr}`;
+  const missExcludes = ['実働欄文法外', '実働欄の手法運用が実働を超過'];
+  assertion('ob01-actual-missing-no-warning', miss.status === 0 && missCombined.includes('実働記録件数: 0/2') && missCombined.includes('実働平均分: 該当なし') && missExcludes.every((value) => !missCombined.includes(value)), { exit: miss.status, present: missExcludes.filter((value) => missCombined.includes(value)) });
   const emptyHome = join(runsRoot, 'ob01-empty-home'); rmSync(emptyHome, { recursive: true, force: true }); mkdirSync(emptyHome, { recursive: true });
   const empty = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: emptyHome });
   assertion('ob01-dev-notes-missing', empty.status === 0 && empty.stdout.includes('~/dev-notes 不在'));
@@ -945,10 +957,425 @@ function sharedClauseFixtures() {
   expect('ob02-shared-normal-and-all-drifts', process.execPath, [join(repoRoot, 'scripts/check-shared-clauses.mjs'), '--self-test'], repoRoot, 0, null, ['deliberate drifts detected']);
 }
 
+// session-metrics.mjs（method-check の固定集計スクリプト）の検体。direction 検証設計表の全失敗クラス×
+// EC-MC-1〜4 の oracle・反証を assertion 化する。合成 fixture は時間分類の期待値を厳密に持ち、反証
+// （fail-open）対照実装が別々に落ちるよう設計する。実 transcript 由来匿名 fixture は client・保持イベント
+// 種別構成のみを非識別 provenance として変数名で表現し、採取元セッション ID は残さない。
+function sessionMetricsFixtures() {
+  const dir = join(workRoot, 'session-metrics'); mkdirSync(dir, { recursive: true });
+  const base = Date.UTC(2026, 6, 1, 0, 0, 0);
+  const iso = (ms) => new Date(base + ms).toISOString();
+  const writeLog = (name, events) => { const path = join(dir, `${name}.jsonl`); writeFileSync(path, `${events.map((e) => (typeof e === 'string' ? e : JSON.stringify(e))).join('\n')}\n`); return path; };
+  const runMetrics = (paths, methodPaths = []) => {
+    const args = [sessionMetrics];
+    for (const p of paths) args.push('--session', p);
+    for (const m of methodPaths) args.push('--method-path', m);
+    const result = run(process.execPath, args, repoRoot);
+    let json = null; try { json = JSON.parse(result.stdout); } catch { /* leave null */ }
+    return { status: result.status, json, stderr: result.stderr };
+  };
+  // Claude イベントビルダ（必要最小キー）。
+  const cUser = (ms, text) => ({ type: 'user', timestamp: iso(ms), message: { role: 'user', content: text } });
+  const cAssistantText = (ms, text) => ({ type: 'assistant', timestamp: iso(ms), message: { role: 'assistant', content: [{ type: 'text', text }] } });
+  const cAssistantTools = (ms, tools) => ({ type: 'assistant', timestamp: iso(ms), message: { role: 'assistant', content: tools.map((t) => ({ type: 'tool_use', id: t.id, name: t.name, input: t.input })) } });
+  const cToolResult = (ms, id, body = 'ok') => ({ type: 'user', timestamp: iso(ms), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: body }] } });
+  const cSystemTurn = (ms, durationMs) => ({ type: 'system', subtype: 'turn_duration', timestamp: iso(ms), durationMs });
+  // Codex イベントビルダ。
+  const xMeta = (ms) => ({ type: 'session_meta', timestamp: iso(ms), payload: { id: 'anon', cwd: '/anon/repo', source: 'cli' } });
+  const xTaskStart = (ms) => ({ type: 'event_msg', timestamp: iso(ms), payload: { type: 'task_started', started_at: iso(ms) } });
+  const xTaskComplete = (ms, durationMs) => ({ type: 'event_msg', timestamp: iso(ms), payload: { type: 'task_complete', duration_ms: durationMs, completed_at: iso(ms) } });
+  const xTaskAbort = (ms, durationMs) => ({ type: 'event_msg', timestamp: iso(ms), payload: { type: 'turn_aborted', duration_ms: durationMs } });
+  const xReason = (ms) => ({ type: 'response_item', timestamp: iso(ms), payload: { type: 'reasoning', content: [] } });
+  const xFnCall = (ms, id, name, args) => ({ type: 'response_item', timestamp: iso(ms), payload: { type: 'function_call', call_id: id, name, arguments: JSON.stringify(args) } });
+  const xFnOut = (ms, id) => ({ type: 'response_item', timestamp: iso(ms), payload: { type: 'function_call_output', call_id: id } });
+  const xMcpBegin = (ms, id) => ({ type: 'event_msg', timestamp: iso(ms), payload: { type: 'mcp_tool_call_begin', call_id: id } });
+  const xMcpEnd = (ms, id, secs, nanos) => ({ type: 'event_msg', timestamp: iso(ms), payload: { type: 'mcp_tool_call_end', call_id: id, duration: { secs, nanos } } });
+  const xToken = (ms, total) => ({ type: 'event_msg', timestamp: iso(ms), payload: { type: 'token_count', info: { total_token_usage: { total_tokens: total, input_tokens: total } } } });
+  const devDir = '/Users/anon/dev-notes/proj/direction/plan.md';
+  const bd = (s) => s.json.sessions[0].breakdown;
+  const s0 = (s) => s.json.sessions[0];
+  const invariantHolds = (session) => session.activeMs + session.userWaitMs === session.wallClockMs
+    && BREAKDOWN_KEYS_FX.every((k) => k in session.breakdown)
+    && BREAKDOWN_KEYS_FX.reduce((t, k) => t + session.breakdown[k], 0) === session.activeMs;
+
+  // FC 分類誤り（fail-open）+ 委譲待ち: userWait / delegationWait の期待値一致（EC-MC-1）。
+  const fc1 = runMetrics([writeLog('fc-classify-claude', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'a1', name: 'Agent', input: { description: 'delegate' } }]),
+    cToolResult(5000, 'a1'), cAssistantText(6000, 'done'), cUser(20000, 'next question'),
+  ])]);
+  assertion('mc01-claude-userwait', fc1.status === 0 && s0(fc1).userWaitMs === 14000, { uw: fc1.json && s0(fc1).userWaitMs });
+  assertion('mc01-claude-delegation-wait', bd(fc1).delegationWaitMs === 4000 && bd(fc1).llmGenerationMs === 2000, { bd: fc1.json && bd(fc1) });
+  assertion('mc01-claude-invariant', invariantHolds(s0(fc1)));
+  assertion('mc01-claude-turnduration-null', s0(fc1).turnDurationCheckMs === null, { tdc: fc1.json && s0(fc1).turnDurationCheckMs });
+
+  // FC 並行 pending の二重計上: 手法・非手法ツールの重なり区間で methodOps へ1回のみ帰属（EC-MC-1）。
+  const fc2 = runMetrics([writeLog('fc-concurrent-method', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'w1', name: 'Write', input: { file_path: devDir } }, { id: 'r1', name: 'Read', input: { file_path: '/tmp/a.txt' } }]),
+    cToolResult(3000, 'r1'), cToolResult(4000, 'w1'),
+  ])]);
+  assertion('mc01-concurrent-methodops-once', bd(fc2).methodOpsMs === 4000 && bd(fc2).toolExecutionMs === 0 && bd(fc2).delegationWaitMs === 0, { bd: fc2.json && bd(fc2) });
+  assertion('mc01-concurrent-invariant', invariantHolds(s0(fc2)));
+
+  // FC 優先順位の逆転・欠落: 委譲系 call と通常ツールのみ重なる → delegationWait へ1回のみ（EC-MC-1・上段と独立）。
+  const fc3 = runMetrics([writeLog('fc-concurrent-delegation', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'a1', name: 'Task', input: { description: 'x' } }, { id: 'r1', name: 'Read', input: { file_path: '/tmp/a.txt' } }]),
+    cToolResult(3000, 'r1'), cToolResult(5000, 'a1'),
+  ])]);
+  assertion('mc01-delegation-priority', bd(fc3).delegationWaitMs === 4000 && bd(fc3).toolExecutionMs === 0 && bd(fc3).methodOpsMs === 0, { bd: fc3.json && bd(fc3) });
+
+  // FC queue-operation / teammate はユーザー待ちに算入しない（EC-MC-1）。
+  const fcQueue = runMetrics([writeLog('fc-queue-teammate', [
+    cUser(0, 'start'), cAssistantText(1000, 'done'),
+    { type: 'queue-operation', operation: 'enqueue', timestamp: iso(2000), content: '## task-notification teammate' },
+    cUser(3000, 'Another Claude session sent a message:\n<teammate-message team="x">hi</teammate-message>'),
+    cAssistantText(4000, 'reply'),
+  ])]);
+  assertion('mc01-queue-teammate-not-userwait', fcQueue.status === 0 && s0(fcQueue).userWaitMs === 0, { uw: fcQueue.json && s0(fcQueue).userWaitMs });
+
+  // FC 中断ターン欠落 + 検算値無視（Codex, EC-MC-2 反証a/b）。
+  const fcAbort = runMetrics([writeLog('fc-codex-abort', [
+    xMeta(0), xTaskStart(1000), xReason(2000), xTaskAbort(3000, 2000), xTaskStart(10000), xTaskComplete(11000, 1000),
+  ])]);
+  assertion('mc02-codex-abort-userwait', s0(fcAbort).userWaitMs === 8000 && s0(fcAbort).activeMs === 3000, { uw: fcAbort.json && s0(fcAbort).userWaitMs, active: fcAbort.json && s0(fcAbort).activeMs });
+  assertion('mc02-codex-durationcheck', s0(fcAbort).durationCheckMs === 3000, { dc: fcAbort.json && s0(fcAbort).durationCheckMs });
+  assertion('mc02-codex-abort-invariant', invariantHolds(s0(fcAbort)));
+
+  // FC turn 外区間の誤帰属: 最初の task_started 前・最終終端後の非 task イベントが userWait へ一意帰属（EC-MC-2）。
+  const fcExternal = runMetrics([writeLog('fc-codex-external', [
+    xMeta(0), { type: 'turn_context', timestamp: iso(1000), payload: { type: 'turn_context' } }, xTaskStart(2000), xTaskComplete(3000, 1000),
+    { type: 'world_state', timestamp: iso(5000), payload: { type: 'world_state' } }, xToken(6000, 1234),
+  ])]);
+  assertion('mc02-codex-external-userwait', s0(fcExternal).userWaitMs === 5000 && bd(fcExternal).unattributedMs === 0, { uw: fcExternal.json && s0(fcExternal).userWaitMs, un: fcExternal.json && bd(fcExternal).unattributedMs });
+  assertion('mc02-codex-external-invariant', invariantHolds(s0(fcExternal)));
+  assertion('mc02-codex-token', s0(fcExternal).tokens && s0(fcExternal).tokens.total_tokens === 1234);
+
+  // FC 二重計上（パーティション破り）: MCP duration がタイムスタンプ差と異なる（EC-MC-2 反証c）。
+  const fcMcp = runMetrics([writeLog('fc-codex-mcp', [
+    xMeta(0), xTaskStart(1000), xMcpBegin(2000, 'm1'), xMcpEnd(2500, 'm1', 5, 0), xTaskComplete(3000, 2000),
+  ])]);
+  assertion('mc02-codex-mcp-breakdown-timestamp', bd(fcMcp).toolExecutionMs === 500, { te: fcMcp.json && bd(fcMcp).toolExecutionMs });
+  assertion('mc02-codex-mcp-duration-separate', s0(fcMcp).mcpDurationMs === 5000, { mcp: fcMcp.json && s0(fcMcp).mcpDurationMs });
+  assertion('mc02-codex-mcp-invariant', invariantHolds(s0(fcMcp)));
+
+  // FC 過検知（迂回面）: /directions/・direction.md・.work 外 review-ledger は非計上（EC-MC-3）。
+  const fcBypass = runMetrics([writeLog('fc-bypass', [
+    cUser(0, 'start'),
+    cAssistantTools(1000, [{ id: 't1', name: 'Write', input: { file_path: '/Users/anon/dev-notes/proj/directions/plan.md' } }]), cToolResult(2000, 't1'),
+    cAssistantTools(3000, [{ id: 't2', name: 'Write', input: { file_path: '/Users/anon/dev-notes/proj/direction.md' } }]), cToolResult(4000, 't2'),
+    cAssistantTools(5000, [{ id: 't3', name: 'Bash', input: { command: 'cat /Users/anon/repo/review-ledger.txt' } }]), cToolResult(6000, 't3'),
+  ])]);
+  assertion('mc03-bypass-no-methodops', bd(fcBypass).methodOpsMs === 0, { m: fcBypass.json && bd(fcBypass).methodOpsMs });
+
+  // FC 過検知（出力偶発出現）: direction パスがツール出力本文にのみ現れる → 非計上（EC-MC-3）。
+  const fcOutput = runMetrics([writeLog('fc-output-only', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'r1', name: 'Read', input: { file_path: '/tmp/a.txt' } }]),
+    cToolResult(2000, 'r1', `see ${devDir}`),
+  ])]);
+  assertion('mc03-output-only-no-methodops', bd(fcOutput).methodOpsMs === 0, { m: fcOutput.json && bd(fcOutput).methodOpsMs });
+
+  // FC 混在規則: 手法・非手法パス混在入力の呼び出しは計上（EC-MC-3）。
+  const fcMixed = runMetrics([writeLog('fc-mixed', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'b1', name: 'Bash', input: { command: `node /tmp/run.js && cat ${devDir}` } }]),
+    cToolResult(2000, 'b1'),
+  ])]);
+  assertion('mc03-mixed-methodops', bd(fcMixed).methodOpsMs === 2000, { m: fcMixed.json && bd(fcMixed).methodOpsMs });
+
+  // FC 過小検知（分岐漏れ）: matcher 6分岐の独立正例。各分岐が単独で methodOps 計上（EC-MC-3）。
+  const branches = [
+    ['dev-notes-direction', { file_path: '/Users/anon/dev-notes/proj/direction/plan.md' }, []],
+    ['friction', { file_path: '/Users/anon/dev-notes/dev-method/friction.md' }, []],
+    ['work-review-ledger', { file_path: '/Users/anon/repo/.work/unit/review-ledger.jsonl' }, []],
+    ['work-plan-review', { file_path: '/Users/anon/repo/.work/unit/plan-review-1.json' }, []],
+    ['work-evidence', { file_path: '/Users/anon/repo/.work/unit/evidence/manifest.json' }, []],
+    ['method-path-substring', { file_path: '/tmp/custom-marker-file.txt' }, ['custom-marker']],
+  ];
+  for (const [name, input, methodPaths] of branches) {
+    const fx = runMetrics([writeLog(`fc-branch-${name}`, [
+      cUser(0, 'start'), cAssistantTools(1000, [{ id: 'b1', name: 'Write', input }]), cToolResult(2000, 'b1'),
+    ])], methodPaths);
+    assertion(`mc03-branch-${name}`, bd(fx).methodOpsMs === 2000, { m: fx.json && bd(fx).methodOpsMs });
+  }
+  // --method-path 空通し検知: substring 無指定なら custom-marker は非計上。
+  const fcNoMarker = runMetrics([writeLog('fc-branch-no-marker', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'b1', name: 'Write', input: { file_path: '/tmp/custom-marker-file.txt' } }]), cToolResult(2000, 'b1'),
+  ])]);
+  assertion('mc03-method-path-empty-passthrough', bd(fcNoMarker).methodOpsMs === 0, { m: fcNoMarker.json && bd(fcNoMarker).methodOpsMs });
+
+  // FC 未知イベントの黙殺（トップレベル未知）: unknownEvents=n の独立 assertion＋隣接区間の unattributedMs 帰属（EC-MC-4）。
+  const fcUnknownTop = runMetrics([writeLog('fc-unknown-top', [
+    cUser(0, 'start'), { type: 'mystery-event', timestamp: iso(1000) }, { type: 'other-unknown', timestamp: iso(1500) },
+    cAssistantText(2000, 'done'), cUser(3000, 'next human prompt'),
+  ])]);
+  assertion('mc04-unknown-top-count', s0(fcUnknownTop).quality.unknownEvents === 2, { u: fcUnknownTop.json && s0(fcUnknownTop).quality.unknownEvents });
+  assertion('mc04-unknown-top-unattributed', bd(fcUnknownTop).unattributedMs === 2000 && s0(fcUnknownTop).userWaitMs === 1000, { un: fcUnknownTop.json && bd(fcUnknownTop).unattributedMs });
+
+  // FC nested type の黙殺（外側既知・nested 未知＝content block）（EC-MC-4）。
+  const fcNestedClaude = runMetrics([writeLog('fc-nested-claude', [
+    cUser(0, 'start'), { type: 'assistant', timestamp: iso(1000), message: { role: 'assistant', content: [{ type: 'weird-block', data: 'x' }] } }, cAssistantText(2000, 'done'),
+  ])]);
+  assertion('mc04-nested-claude-block', s0(fcNestedClaude).quality.unknownEvents >= 1, { u: fcNestedClaude.json && s0(fcNestedClaude).quality.unknownEvents });
+
+  // FC nested type の黙殺（外側既知・nested 未知＝event_msg.payload.type）（EC-MC-4）。
+  const fcNestedCodex = runMetrics([writeLog('fc-nested-codex', [
+    xMeta(0), xTaskStart(1000), { type: 'event_msg', timestamp: iso(1500), payload: { type: 'weird_payload' } }, xTaskComplete(2000, 1000),
+  ])]);
+  assertion('mc04-nested-codex-payload', s0(fcNestedCodex).quality.unknownEvents >= 1, { u: fcNestedCodex.json && s0(fcNestedCodex).quality.unknownEvents });
+
+  // FC 件数差: 壊れ JSON 行 n 行混入 → skippedLines=n・exit 0（EC-MC-4）。
+  const brokenPath = writeLog('fc-broken', [cUser(0, 'start')]);
+  writeFileSync(brokenPath, `${JSON.stringify(cUser(0, 'start'))}\n{ broken json\n${JSON.stringify(cAssistantText(1000, 'x'))}\nnot json at all\n}{\n${JSON.stringify(cUser(2000, 'human next'))}\n`);
+  const fcBroken = runMetrics([brokenPath]);
+  assertion('mc04-broken-skipped-exit0', fcBroken.status === 0 && s0(fcBroken).quality.skippedLines === 3, { exit: fcBroken.status, s: fcBroken.json && s0(fcBroken).quality.skippedLines });
+
+  // FC 突合不能: tool_result 欠落 → orphanToolUses 計上・合計不変式（EC-MC-4）。
+  const fcOrphan = runMetrics([writeLog('fc-orphan', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'x1', name: 'Read', input: { file_path: '/tmp/a.txt' } }]), cAssistantText(2000, 'next'),
+  ])]);
+  assertion('mc04-orphan-count', s0(fcOrphan).quality.orphanToolUses >= 1 && s0(fcOrphan).activeMs <= s0(fcOrphan).wallClockMs, { o: fcOrphan.json && s0(fcOrphan).quality.orphanToolUses });
+
+  // FC 正規化差: Z / +09:00 混在タイムスタンプ → 同一結果（EC-MC-4）。
+  const zForm = runMetrics([writeLog('fc-tz-z', [
+    { type: 'user', timestamp: '2026-07-01T00:00:00.000Z', message: { role: 'user', content: 'start' } },
+    { type: 'assistant', timestamp: '2026-07-01T00:00:01.000Z', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } },
+  ])]);
+  const offForm = runMetrics([writeLog('fc-tz-offset', [
+    { type: 'user', timestamp: '2026-07-01T09:00:00.000+09:00', message: { role: 'user', content: 'start' } },
+    { type: 'assistant', timestamp: '2026-07-01T09:00:01.000+09:00', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } },
+  ])]);
+  assertion('mc04-timezone-normalized', bd(zForm).llmGenerationMs === 1000 && bd(zForm).llmGenerationMs === bd(offForm).llmGenerationMs && s0(zForm).wallClockMs === s0(offForm).wallClockMs, { z: zForm.json && bd(zForm).llmGenerationMs, off: offForm.json && bd(offForm).llmGenerationMs });
+
+  // FC 未登録形式: 両形式のキーを持たない jsonl → exit 1（EC-MC-4 fail-closed）。
+  const fcUnknownFormat = runMetrics([writeLog('fc-unknown-format', [{ foo: 'bar' }, { baz: 1 }])]);
+  assertion('mc04-unknown-format-exit1', fcUnknownFormat.status === 1, { exit: fcUnknownFormat.status });
+  // 引数なし → exit 1。
+  const noArgs = run(process.execPath, [sessionMetrics], repoRoot);
+  assertion('mc04-no-args-exit1', noArgs.status === 1, { exit: noArgs.status });
+  // ファイル不在 → exit 1。
+  const missing = runMetrics([join(dir, 'does-not-exist.jsonl')]);
+  assertion('mc04-missing-file-exit1', missing.status === 1, { exit: missing.status });
+
+  // mirror 軸: 同一論理シナリオを Claude / Codex 両形式で表現し userWaitMs・activeMs が一致（EC-MC-2）。
+  const mirrorClaude = runMetrics([writeLog('fc-mirror-claude', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'r1', name: 'Read', input: { file_path: '/tmp/a.txt' } }]),
+    cToolResult(2000, 'r1'), cAssistantText(2500, 'done'), cUser(7500, 'next human'), cAssistantText(8500, 'hi'),
+  ])]);
+  const mirrorCodex = runMetrics([writeLog('fc-mirror-codex', [
+    xMeta(0), xTaskStart(0), xFnCall(1000, 'c1', 'read', { path: '/tmp/a.txt' }), xFnOut(2000, 'c1'),
+    xTaskComplete(2500, 2500), xTaskStart(7500), xTaskComplete(8500, 1000),
+  ])]);
+  assertion('mc02-mirror-userwait', s0(mirrorClaude).userWaitMs === s0(mirrorCodex).userWaitMs && s0(mirrorClaude).userWaitMs === 5000, { c: mirrorClaude.json && s0(mirrorClaude).userWaitMs, x: mirrorCodex.json && s0(mirrorCodex).userWaitMs });
+  assertion('mc02-mirror-active', s0(mirrorClaude).activeMs === s0(mirrorCodex).activeMs && s0(mirrorClaude).activeMs === 3500, { c: mirrorClaude.json && s0(mirrorClaude).activeMs, x: mirrorCodex.json && s0(mirrorCodex).activeMs });
+
+  // 境界間のパラメータ伝播: --session 複数指定が totals へ合算される（EC-MC-1）。
+  const multi = runMetrics([join(dir, 'fc-mirror-claude.jsonl'), join(dir, 'fc-classify-claude.jsonl')]);
+  assertion('mc01-totals-summed', multi.json && multi.json.totals.wallClockMs === s0(mirrorClaude).wallClockMs + s0(fc1).wallClockMs
+    && multi.json.totals.userWaitMs === s0(mirrorClaude).userWaitMs + s0(fc1).userWaitMs, { t: multi.json && multi.json.totals });
+
+  // turn_duration 検算（存在時は合算値）（EC-MC-1）。
+  const fcTurnDur = runMetrics([writeLog('fc-turnduration', [
+    cUser(0, 'start'), cAssistantText(1000, 'x'), cSystemTurn(1100, 1100), cUser(5000, 'next human'), cAssistantText(6000, 'y'), cSystemTurn(6100, 1000),
+  ])]);
+  assertion('mc01-turnduration-sum', s0(fcTurnDur).turnDurationCheckMs === 2100, { tdc: fcTurnDur.json && s0(fcTurnDur).turnDurationCheckMs });
+
+  // RC-A(1) turn 状態機械: pending 残留のまま turn_aborted → 次 task_started まで userWait・残留は orphan（EC-MC-2/4）。
+  const fcAbortPending = runMetrics([writeLog('fc-codex-abort-pending', [
+    xMeta(0), xTaskStart(1000), xFnCall(2000, 'c1', 'shell', { command: ['bash', '-lc', 'cat /tmp/a.txt'] }), xTaskAbort(3000, 2000),
+    xTaskStart(10000), xTaskComplete(11000, 1000),
+  ])]);
+  assertion('mc02-abort-pending-userwait', s0(fcAbortPending).userWaitMs === 8000 && bd(fcAbortPending).toolExecutionMs === 1000 && s0(fcAbortPending).quality.orphanToolUses === 1, { uw: fcAbortPending.json && s0(fcAbortPending).userWaitMs, te: fcAbortPending.json && bd(fcAbortPending).toolExecutionMs, o: fcAbortPending.json && s0(fcAbortPending).quality.orphanToolUses });
+  assertion('mc02-abort-pending-invariant', invariantHolds(s0(fcAbortPending)));
+
+  // RC-A(2) turn 外の未知イベント（実在型 inter_agent_communication_metadata）を挟んでも userWait へ一意帰属（EC-MC-2）。
+  const fcExtUnknown = runMetrics([writeLog('fc-codex-external-unknown', [
+    xMeta(0), xTaskStart(1000), xTaskComplete(2000, 1000),
+    { type: 'inter_agent_communication_metadata', timestamp: iso(3000), payload: {} },
+    xTaskStart(8000), xTaskComplete(9000, 1000),
+  ])]);
+  assertion('mc02-external-unknown-userwait', s0(fcExtUnknown).userWaitMs === 7000 && bd(fcExtUnknown).unattributedMs === 0, { uw: fcExtUnknown.json && s0(fcExtUnknown).userWaitMs, un: fcExtUnknown.json && bd(fcExtUnknown).unattributedMs });
+
+  // RC-A(3) turn 内の未知イベント（compacted）の前後両区間が unattributed（prevUnknown 伝播）（EC-MC-2/4）。
+  const fcInnerCompacted = runMetrics([writeLog('fc-codex-inner-compacted', [
+    xMeta(0), xTaskStart(1000), xReason(2000), { type: 'compacted', timestamp: iso(3000), payload: {} }, xReason(4000), xTaskComplete(5000, 4000),
+  ])]);
+  assertion('mc02-inner-compacted-unattributed', bd(fcInnerCompacted).unattributedMs === 2000 && s0(fcInnerCompacted).quality.unknownEvents === 1, { un: fcInnerCompacted.json && bd(fcInnerCompacted).unattributedMs, u: fcInnerCompacted.json && s0(fcInnerCompacted).quality.unknownEvents });
+
+  // RC-B(1) 入力本文フィールド（old_string 等、空白を含む本文）にのみ手法パスが現れる呼び出しは非計上（EC-MC-3）。
+  const fcBodyOnly = runMetrics([writeLog('fc-body-field-method', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'w1', name: 'Edit', input: { file_path: '/tmp/a.txt', old_string: `see ${devDir} here`, new_string: 'x' } }]), cToolResult(2000, 'w1'),
+  ])]);
+  assertion('mc03-body-field-not-methodops', bd(fcBodyOnly).methodOpsMs === 0, { m: fcBodyOnly.json && bd(fcBodyOnly).methodOpsMs });
+
+  // RC-B(2) friction 類似パス（friction.md.bak）はセグメント末尾一致でないため非計上（EC-MC-3）。
+  const fcFrictionLike = runMetrics([writeLog('fc-friction-like', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'w1', name: 'Write', input: { file_path: '/Users/anon/repo/friction.md.bak' } }]), cToolResult(2000, 'w1'),
+  ])]);
+  assertion('mc03-friction-like-not-methodops', bd(fcFrictionLike).methodOpsMs === 0, { m: fcFrictionLike.json && bd(fcFrictionLike).methodOpsMs });
+
+  // RC-B(3) Codex shell の command 配列（['bash','-lc',...]）を要素分割して手法パスを抽出・計上（EC-MC-3 の Codex 形式分岐）。
+  const fcCodexShellArray = runMetrics([writeLog('fc-codex-shell-array', [
+    xMeta(0), xTaskStart(1000), xFnCall(2000, 'c1', 'shell', { command: ['bash', '-lc', `cat ${devDir}`] }), xFnOut(4000, 'c1'), xTaskComplete(5000, 4000),
+  ])]);
+  assertion('mc03-codex-shell-array-methodops', bd(fcCodexShellArray).methodOpsMs === 3000, { m: fcCodexShellArray.json && bd(fcCodexShellArray).methodOpsMs });
+
+  // 閉包表1: matcher のキー意味論（キー種別×値形状マトリクス）。形状ベース実装と形状フィルタ付きパスキー実装が
+  // それぞれ別の検体で落ちる（EC-MC-3）。
+  // パスキー×裸ファイル名（friction.md）: 形状フィルタ（/ 必須）実装は脱落するが、キー限定列挙は計上する。
+  const fcPathKeyBareName = runMetrics([writeLog('fc-pathkey-bare-friction', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'w1', name: 'Write', input: { file_path: 'friction.md' } }]), cToolResult(2000, 'w1'),
+  ])]);
+  assertion('mc03-pathkey-bare-name-methodops', bd(fcPathKeyBareName).methodOpsMs === 2000, { m: fcPathKeyBareName.json && bd(fcPathKeyBareName).methodOpsMs });
+  // 本文キー×単一パストークン（old_string が空白なしの手法パス丸ごと）: 形状ベース実装が過検知する失敗シナリオ。
+  const fcBodyKeySingleToken = runMetrics([writeLog('fc-bodykey-single-token', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'w1', name: 'Edit', input: { file_path: '/tmp/a.txt', old_string: devDir } }]), cToolResult(2000, 'w1'),
+  ])]);
+  assertion('mc03-bodykey-single-token-not-methodops', bd(fcBodyKeySingleToken).methodOpsMs === 0, { m: fcBodyKeySingleToken.json && bd(fcBodyKeySingleToken).methodOpsMs });
+  // 未知キー×パス形の値: 列挙外キーは候補化しない（過小検知方向）。
+  const fcUnknownKeyPath = runMetrics([writeLog('fc-unknownkey-path', [
+    cUser(0, 'start'), cAssistantTools(1000, [{ id: 'w1', name: 'Custom', input: { some_unknown_key: devDir } }]), cToolResult(2000, 'w1'),
+  ])]);
+  assertion('mc03-unknown-key-not-methodops', bd(fcUnknownKeyPath).methodOpsMs === 0, { m: fcUnknownKeyPath.json && bd(fcUnknownKeyPath).methodOpsMs });
+
+  // RC-D 先頭・末尾が system / queue-operation / 未知型の Claude fixture → 端点を全 timestamped イベントへ拡張し
+  // 未被覆の先頭・末尾隣接区間を unattributed へ反映（Codex と対称）（EC-MC-1）。
+  const fcEndpoints = runMetrics([writeLog('fc-claude-endpoints', [
+    { type: 'summary', summary: 'lead', leafUuid: 'x' },
+    cSystemTurn(0, 0),
+    { type: 'queue-operation', operation: 'enqueue', timestamp: iso(500), content: 'x' },
+    cUser(1000, 'start'), cAssistantText(2000, 'done'),
+    { type: 'ai-title', title: 'x' },
+    { type: 'mystery-tail', timestamp: iso(5000) },
+  ])]);
+  assertion('mc01-claude-endpoints', s0(fcEndpoints).wallClockMs === 5000 && bd(fcEndpoints).unattributedMs === 4000 && s0(fcEndpoints).quality.unknownEvents === 1 && invariantHolds(s0(fcEndpoints)), { wall: fcEndpoints.json && s0(fcEndpoints).wallClockMs, un: fcEndpoints.json && bd(fcEndpoints).unattributedMs });
+
+  // RC-E Codex の待機・委譲系ツール wait_agent と通常ツールの重なり → delegationWait へ帰属（EC-MC-1/2）。
+  const fcWaitAgent = runMetrics([writeLog('fc-codex-wait-agent', [
+    xMeta(0), xTaskStart(1000), xFnCall(2000, 'a1', 'wait_agent', {}), xFnCall(2500, 'r1', 'shell', { command: ['bash', '-lc', 'cat /tmp/a.txt'] }),
+    xFnOut(4000, 'r1'), xFnOut(6000, 'a1'), xTaskComplete(7000, 6000),
+  ])]);
+  assertion('mc02-wait-agent-delegation', bd(fcWaitAgent).delegationWaitMs === 4000 && bd(fcWaitAgent).toolExecutionMs === 0, { d: fcWaitAgent.json && bd(fcWaitAgent).delegationWaitMs, te: fcWaitAgent.json && bd(fcWaitAgent).toolExecutionMs });
+
+  // RC-F Codex 実在 top-level 型（compacted / inter_agent_communication_metadata）は unknown、契約列挙済み型
+  // （turn_context / world_state / thread_settings_applied）は unknown にならないことを固定（EC-MC-4）。
+  const fcRealTypes = runMetrics([writeLog('fc-codex-real-types', [
+    xMeta(0), { type: 'turn_context', timestamp: iso(100), payload: { type: 'turn_context' } }, { type: 'compacted', timestamp: iso(200), payload: {} },
+    xTaskStart(1000), { type: 'event_msg', timestamp: iso(1100), payload: { type: 'thread_settings_applied' } }, xTaskComplete(2000, 1000),
+    { type: 'inter_agent_communication_metadata', timestamp: iso(3000), payload: {} }, { type: 'world_state', timestamp: iso(3500), payload: { type: 'world_state' } },
+  ])]);
+  assertion('mc04-codex-real-types-unknown-count', s0(fcRealTypes).quality.unknownEvents === 2 && invariantHolds(s0(fcRealTypes)), { u: fcRealTypes.json && s0(fcRealTypes).quality.unknownEvents });
+
+  // must: クライアント判別 fail-closed。session_meta が無く既知 top-level 型だけの Codex 風ファイルは exit 1（EC-MC-2/4）。
+  const fcNoSessionMeta = runMetrics([writeLog('fc-codex-no-session-meta', [
+    { type: 'event_msg', timestamp: iso(0), payload: { type: 'task_started' } },
+    { type: 'response_item', timestamp: iso(1000), payload: { type: 'reasoning', content: [] } },
+    { type: 'event_msg', timestamp: iso(2000), payload: { type: 'task_complete', duration_ms: 2000 } },
+  ])]);
+  assertion('mc04-no-session-meta-exit1', fcNoSessionMeta.status === 1, { exit: fcNoSessionMeta.status });
+
+  // must: nested discriminator 欠落の fail-closed。payload.type が null / 欠落の event_msg / response_item は
+  // unknownEvents へ計上し隣接区間を unattributedMs へ帰属する（EC-MC-4。「値があるときだけ照合」fail-open を排除）。
+  const fcDiscriminator = runMetrics([writeLog('fc-codex-discriminator-missing', [
+    xMeta(0), xTaskStart(1000),
+    { type: 'event_msg', timestamp: iso(2000), payload: { type: null } },
+    { type: 'response_item', timestamp: iso(3000), payload: {} },
+    xTaskComplete(4000, 3000),
+  ])]);
+  assertion('mc04-discriminator-missing-unknown', s0(fcDiscriminator).quality.unknownEvents === 2 && bd(fcDiscriminator).unattributedMs === 3000 && invariantHolds(s0(fcDiscriminator)), { u: fcDiscriminator.json && s0(fcDiscriminator).quality.unknownEvents, un: fcDiscriminator.json && bd(fcDiscriminator).unattributedMs });
+
+  // must1: 測定 cutoff のバイト固定（EC-MC-6/1/2）。(a) cutoffBytes = 起動時 stat サイズ。
+  const cutoffPath = writeLog('fc-cutoff', [cUser(0, 'start'), cAssistantText(1000, 'x'), cUser(2000, 'next human')]);
+  const fcCutoff = runMetrics([cutoffPath]);
+  assertion('mc06-cutoff-bytes-equals-size', s0(fcCutoff).cutoffBytes === statSync(cutoffPath).size, { c: fcCutoff.json && s0(fcCutoff).cutoffBytes, size: statSync(cutoffPath).size });
+  // (b) end 固定の実効性: 末尾に partial line（改行なし・不完全 JSON）を足したファイルは partial 行を skippedLines へ
+  // 決定論的に計上し、cutoffBytes は stat サイズと一致する。
+  const partialPath = join(dir, 'fc-cutoff-partial.jsonl');
+  writeFileSync(partialPath, `${readFileSync(cutoffPath, 'utf8')}{"type":"user","timesta`);
+  const fcPartial = runMetrics([partialPath]);
+  assertion('mc06-cutoff-partial-line-deterministic', s0(fcPartial).cutoffBytes === statSync(partialPath).size && s0(fcPartial).quality.skippedLines === 1, { c: fcPartial.json && s0(fcPartial).cutoffBytes, s: fcPartial.json && s0(fcPartial).quality.skippedLines });
+  // (c) cutoffBytes は stat サイズを追う: 追記後の再解析で cutoffBytes が新サイズになり追記行が読まれる（起動時サイズで固定）。
+  const growPath = join(dir, 'fc-cutoff-grow.jsonl');
+  writeFileSync(growPath, `${JSON.stringify(cUser(0, 'start'))}\n${JSON.stringify(cAssistantText(1000, 'x'))}\n`);
+  const grow1 = runMetrics([growPath]); const growSize1 = statSync(growPath).size;
+  writeFileSync(growPath, `${JSON.stringify(cUser(2000, 'next human'))}\n`, { flag: 'a' });
+  const grow2 = runMetrics([growPath]); const growSize2 = statSync(growPath).size;
+  assertion('mc06-cutoff-tracks-stat-size', s0(grow1).cutoffBytes === growSize1 && s0(grow2).cutoffBytes === growSize2 && growSize2 > growSize1 && s0(grow2).quality.parsedLines === s0(grow1).quality.parsedLines + 1, { c1: grow1.json && s0(grow1).cutoffBytes, c2: grow2.json && s0(grow2).cutoffBytes });
+
+  // must2: Claude content block discriminator の対称 fail-closed（EC-MC-4）。非 object block（{}）と type:null block を
+  // 含む assistant 行は unknownEvents 計上＋隣接区間 unattributed。「値があるときだけ照合」実装は unknownEvents=0 で落ちる。
+  const fcClaudeDiscriminator = runMetrics([writeLog('fc-claude-discriminator', [
+    cUser(0, 'start'),
+    { type: 'assistant', timestamp: iso(1000), message: { role: 'assistant', content: [{}] } },
+    { type: 'assistant', timestamp: iso(2000), message: { role: 'assistant', content: [{ type: null }] } },
+    cAssistantText(3000, 'ok'),
+  ])]);
+  assertion('mc04-claude-discriminator-unknown', s0(fcClaudeDiscriminator).quality.unknownEvents === 2 && bd(fcClaudeDiscriminator).unattributedMs > 0 && invariantHolds(s0(fcClaudeDiscriminator)), { u: fcClaudeDiscriminator.json && s0(fcClaudeDiscriminator).quality.unknownEvents, un: fcClaudeDiscriminator.json && bd(fcClaudeDiscriminator).unattributedMs });
+
+  // should: preDetection バッファ上限（EC-MC-4）。上限超の未知形式ファイルは EOF まで読まず exit 1（fail-closed）。
+  const fcPreLimit = runMetrics([writeLog('fc-pre-detection-limit', Array.from({ length: 300 }, (unused, i) => ({ foo: 'bar', i })))]);
+  assertion('mc04-pre-detection-limit-exit1', fcPreLimit.status === 1, { exit: fcPreLimit.status });
+
+  sessionMetricsRealTranscriptFixtures(dir, runMetrics, iso, invariantHolds, s0);
+}
+
+// 実 transcript 由来匿名 fixture。実ログのキー構成・timestamp 形式・イベント順序を保持し、パス・本文・ID を
+// 差し替えた抜粋。非識別 provenance（client と保持したイベント種別構成）だけを変数名・assertion 名で表現し、
+// 採取元セッション ID はリポジトリ・コミット履歴へ残さない。合成 fixture だけでは代表できないキー欠損パターン
+// （Claude の last-prompt/ai-title 等 timestamp 無しメタ行、Codex の turn_context/world_state 混在）を担保する。
+function sessionMetricsRealTranscriptFixtures(dir, runMetrics, iso, invariantHolds, s0) {
+  // Claude: user(prompt/tool_result)・assistant(text/thinking/tool_use)・system(turn_duration/stop_hook)・
+  // queue-operation・timestamp 無しメタ行（last-prompt/ai-title/summary）の構成を保持した匿名抜粋。
+  const claudeLines = [
+    { type: 'summary', summary: 'anonymized session summary', leafUuid: 'anon-0' },
+    { type: 'user', timestamp: iso(0), message: { role: 'user', content: 'anonymized human request' }, cwd: '/anon/repo', gitBranch: 'main', promptSource: 'typed', sessionId: 'anon', uuid: 'anon-1', userType: 'external', version: '2.1.0', isSidechain: false, parentUuid: null },
+    { type: 'assistant', timestamp: iso(3000), message: { role: 'assistant', id: 'anon', model: 'anon', content: [{ type: 'thinking', thinking: 'redacted' }, { type: 'text', text: 'anonymized reply' }] }, sessionId: 'anon', uuid: 'anon-2' },
+    { type: 'assistant', timestamp: iso(6000), message: { role: 'assistant', content: [{ type: 'tool_use', id: 'anon-tool-1', name: 'Read', input: { file_path: '/anon/repo/file.txt' } }] }, sessionId: 'anon', uuid: 'anon-3' },
+    { type: 'user', timestamp: iso(8000), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'anon-tool-1', content: 'anonymized output' }] }, sessionId: 'anon', uuid: 'anon-4', isSidechain: false },
+    { type: 'assistant', timestamp: iso(9000), message: { role: 'assistant', content: [{ type: 'tool_use', id: 'anon-tool-2', name: 'Write', input: { file_path: '/Users/anon/dev-notes/proj/direction/plan.md', content: 'anon' } }] }, sessionId: 'anon', uuid: 'anon-5' },
+    { type: 'user', timestamp: iso(12000), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'anon-tool-2', content: 'ok' }] }, sessionId: 'anon', uuid: 'anon-6' },
+    { type: 'assistant', timestamp: iso(13000), message: { role: 'assistant', content: [{ type: 'text', text: 'anonymized completion' }] }, sessionId: 'anon', uuid: 'anon-7' },
+    { type: 'system', subtype: 'stop_hook_summary', timestamp: iso(13100), hookCount: 1, sessionId: 'anon', uuid: 'anon-8' },
+    { type: 'system', subtype: 'turn_duration', durationMs: 13100, timestamp: iso(13100), messageCount: 8, sessionId: 'anon', uuid: 'anon-9' },
+    { type: 'last-prompt', lastPrompt: 'anonymized', leafUuid: 'anon-7', sessionId: 'anon' },
+    { type: 'ai-title', title: 'anonymized', sessionId: 'anon' },
+    { type: 'user', timestamp: iso(60000), message: { role: 'user', content: 'anonymized follow-up' }, promptSource: 'typed', sessionId: 'anon', uuid: 'anon-10', isSidechain: false },
+    { type: 'assistant', timestamp: iso(63000), message: { role: 'assistant', content: [{ type: 'text', text: 'anon' }] }, sessionId: 'anon', uuid: 'anon-11' },
+  ];
+  const claudePath = join(dir, 'real-claude-anon.jsonl');
+  writeFileSync(claudePath, `${claudeLines.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  const realClaude = runMetrics([claudePath]);
+  assertion('mc-real-claude-exit0-invariant', realClaude.status === 0 && invariantHolds(s0(realClaude)), { exit: realClaude.status });
+  assertion('mc-real-claude-clean-quality', s0(realClaude).quality.unknownEvents === 0 && s0(realClaude).quality.skippedLines === 0, { q: realClaude.json && s0(realClaude).quality });
+  assertion('mc-real-claude-userwait-and-methodops', s0(realClaude).userWaitMs === 47000 && s0(realClaude).breakdown.methodOpsMs === 4000, { uw: realClaude.json && s0(realClaude).userWaitMs, m: realClaude.json && s0(realClaude).breakdown.methodOpsMs });
+
+  // Codex: session_meta・turn_context・response_item(reasoning/message/function_call 対)・event_msg(task 境界・
+  // mcp_tool_call_end・token_count)・world_state を保持した匿名抜粋。
+  const codexLines = [
+    { type: 'session_meta', timestamp: iso(0), payload: { id: 'anon', cwd: '/anon/repo', source: 'cli', originator: 'cli', cli_version: 'anon' } },
+    { type: 'turn_context', timestamp: iso(100), payload: { type: 'turn_context', cwd: '/anon/repo' } },
+    { type: 'event_msg', timestamp: iso(500), payload: { type: 'task_started', started_at: iso(500) } },
+    { type: 'response_item', timestamp: iso(1000), payload: { type: 'reasoning', content: [{ type: 'reasoning_text', text: 'redacted' }] } },
+    { type: 'response_item', timestamp: iso(2000), payload: { type: 'function_call', call_id: 'anon-c1', name: 'shell', arguments: JSON.stringify({ command: ['bash', '-lc', 'cat /anon/repo/file.txt'] }) } },
+    { type: 'response_item', timestamp: iso(4000), payload: { type: 'function_call_output', call_id: 'anon-c1' } },
+    { type: 'event_msg', timestamp: iso(4500), payload: { type: 'mcp_tool_call_begin', call_id: 'anon-m1' } },
+    { type: 'event_msg', timestamp: iso(6000), payload: { type: 'mcp_tool_call_end', call_id: 'anon-m1', duration: { secs: 1, nanos: 500000000 }, invocation: { server: 'anon', tool: 'anon' } } },
+    { type: 'response_item', timestamp: iso(6500), payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'anon' }] } },
+    { type: 'event_msg', timestamp: iso(7000), payload: { type: 'token_count', info: { total_token_usage: { total_tokens: 12345, input_tokens: 10000, output_tokens: 2345 } } } },
+    { type: 'event_msg', timestamp: iso(7500), payload: { type: 'task_complete', duration_ms: 7000, completed_at: iso(7500) } },
+    { type: 'world_state', timestamp: iso(8000), payload: { type: 'world_state' } },
+    { type: 'event_msg', timestamp: iso(60000), payload: { type: 'task_started', started_at: iso(60000) } },
+    { type: 'event_msg', timestamp: iso(62000), payload: { type: 'task_complete', duration_ms: 2000, completed_at: iso(62000) } },
+  ];
+  const codexPath = join(dir, 'real-codex-anon.jsonl');
+  writeFileSync(codexPath, `${codexLines.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  const realCodex = runMetrics([codexPath]);
+  assertion('mc-real-codex-exit0-invariant', realCodex.status === 0 && invariantHolds(s0(realCodex)), { exit: realCodex.status });
+  assertion('mc-real-codex-clean-quality', s0(realCodex).quality.unknownEvents === 0 && s0(realCodex).quality.skippedLines === 0, { q: realCodex.json && s0(realCodex).quality });
+  assertion('mc-real-codex-durationcheck-mcp-token', s0(realCodex).durationCheckMs === 9000 && s0(realCodex).mcpDurationMs === 1500 && s0(realCodex).tokens.total_tokens === 12345, { dc: realCodex.json && s0(realCodex).durationCheckMs, mcp: realCodex.json && s0(realCodex).mcpDurationMs });
+}
+
 function main() {
   mkdirSync(runsRoot, { recursive: true }); mkdirSync(logsRoot, { recursive: true });
   evidenceReadinessFixtures(); packageFixtures(); evidencePairRequirementFixtures(); manifestIntegrityFixtures(); resolverFixtures(); toolingFixtures(); detailedToolingFixtures(); waitUsageFixtures(); ledgerFixtures();
-  reviewRuntimeStaticFixtures(); reviewParserFixtures(); methodStatsFixtures(); concurrentHarnessFixtures(); sharedClauseFixtures();
+  reviewRuntimeStaticFixtures(); reviewParserFixtures(); methodStatsFixtures(); sessionMetricsFixtures(); concurrentHarnessFixtures(); sharedClauseFixtures();
   const summary = { generated_at: new Date().toISOString(), total: results.length, passed: results.filter(({ passed }) => passed).length, failed: results.filter(({ passed }) => !passed).length, results };
   writeFileSync(join(workRoot, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ total: summary.total, passed: summary.passed, failed: summary.failed, summary: join(workRoot, 'summary.json') })}\n`);

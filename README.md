@@ -22,7 +22,7 @@ Ask の Evidence Package は、direction で明示した既知契約と、その
 
 - Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ role と実行 model を含む終了通知を出す（model 欠損入力では role のみ）。実行中は既存の Active 表示で確認する
 - Claude Code の `SubagentStop` 報告ゲート hook — サブエージェント自身の transcript（`agent_transcript_path`）で、最新の非meta user実作業指示、または `origin.kind` が `coordinator` のmeta user指示より後だけを判定する。それ以外のmeta reminderとtool_resultは指示境界にしない。`agent_type` が完全一致で `dev-method-claude:reviewer` のときは `レビュー完了報告:`・`diff指紋:`・`指摘:`・`承認可否:`、それ以外は `完了報告:`・`検証証跡:`・`逸脱:`・`未達事項:` を各行頭に持つ `SendMessage` が必要。本文は `input.message`、無ければ文字列の `input.content` だけを読み、`summary` / `to` は判定に使わない。Show reviewer は `diff指紋: 対象外（Show）` とする。再入時（`stop_hook_active`）はブロックせず、入力パース不能・transcript 不在・認識可能行ゼロは fail-open（判定不能として続行）
-- `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。「時間がかかった」と感じたときにその場で呼び、スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
+- `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。固定スクリプト `references/session-metrics.mjs` で時間内訳を決定論的に集計する。Ask 完了時は direction の工程として必須実行し（実働欄を実測確定）、それ以外は「時間がかかった」と感じたときの主観トリガーで呼ぶ。スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
 - `scenario-kit` — Playwright 録画を軸にした3用途ツール: ブランド付きデモ動画（`run`）、リリースノート・ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`。ランタイム異常検知＋証跡を残す）。1つのシナリオを3用途へ使い回すのが基本形で、接続先が異なる場合だけ `<name>-local.json` 等の変種に分ける
 

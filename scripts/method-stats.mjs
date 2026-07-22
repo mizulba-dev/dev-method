@@ -1,11 +1,12 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const devNotesDir = join(homedir(), 'dev-notes');
 const frictionPath = join(devNotesDir, 'dev-method', 'friction.md');
 const FOOTER_LINE = /^[-*]?\s*実測:\s*(.+)$/;
-const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|ledger |R1 |E2E |Evidence Package|4分類|差し戻し|リーダー直修正|追補\d|QA\s|smoke\s|逸脱:))/;
+const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|ledger |R1 |E2E |実働|Evidence Package|4分類|差し戻し|リーダー直修正|追補\d|QA\s|smoke\s|逸脱:))/;
 const QA_GRAMMAR = /^(PASS|FAIL \d+件|BLOCKED|SKIPPED|未実施)$/;
 const SMOKE_GRAMMAR = /^(PASS|FAIL \d+件|評価不能|対象外|未整備)$/;
 const PARALLEL_REVIEW_GRAMMAR = /^レビュー並列(\d+)R・(\d+)分（R1 pre must(\d+)\+should(\d+)；cross must(\d+)\+should(\d+)；固有 pre(\d+)\+cross(\d+)；重複(\d+)）$/;
@@ -39,6 +40,7 @@ function newRow() {
     uniquePre: null, uniqueCross: null, duplicate: null, parallelValid: false, parallelEligible: false,
     reverts: null, directFixes: null, addenda: null, addendaContracts: null, qa: null, smoke: null,
     deviation: null, newFormat: false, plan: {}, code: {}, e2eMinutes: null,
+    actualMinutes: null, methodOpsMinutes: null, actualInvalid: false, actualEligible: false,
     evidencePrepMinutes: null, evidencePrepStart: null, evidencePrepEnd: null, evidenceTestMinutes: null, classification: null,
   };
 }
@@ -114,7 +116,7 @@ function validateCodeBreakdown(row, warnings) {
   return valid;
 }
 
-function parseFooter(body) {
+export function parseFooter(body) {
   const row = newRow();
   const warnings = [];
   for (const seg of body.split(FIELD_SPLIT).map((s) => s.trim())) {
@@ -138,6 +140,8 @@ function parseFooter(body) {
     if ((m = seg.match(/^R1 code (\S+)$/))) { row.newFormat = true; row.code.outcome = m[1]; continue; }
     if ((m = seg.match(/^E2E (\d+)分$/))) { row.newFormat = true; row.e2eMinutes = Number(m[1]); continue; }
     if (/^E2E /.test(seg)) { row.newFormat = true; warnings.push('E2E文法外'); continue; }
+    if ((m = seg.match(/^実働(\d+)分（手法運用(\d+)分）$/))) { row.newFormat = true; row.actualMinutes = Number(m[1]); row.methodOpsMinutes = Number(m[2]); continue; }
+    if (/^実働/.test(seg)) { row.newFormat = true; row.actualInvalid = true; warnings.push('実働欄文法外'); continue; }
     if ((m = seg.match(/^Evidence Package 準備(\d+)分（開始(\d{2}:\d{2})・終了(\d{2}:\d{2})；テスト(\d+)分）$/))) {
       row.newFormat = true;
       row.evidencePrepMinutes = Number(m[1]); row.evidencePrepStart = m[2]; row.evidencePrepEnd = m[3]; row.evidenceTestMinutes = Number(m[4]);
@@ -180,6 +184,9 @@ function parseFooter(body) {
     if ([row.plan.must, row.plan.should, row.plan.nit].some((value) => value == null)) warnings.push('plan R1 3区分件数欠落');
     if (row.e2eMinutes == null) warnings.push('E2E時間欠落');
     else if (row.plan.minutes != null && row.code.minutes != null && row.e2eMinutes !== row.plan.minutes + row.code.minutes) warnings.push('E2E時間がplan+codeと不整合');
+    // 実働欄は欠測（null かつ非文法外）を警告なしで許容する。文法外・制約違反（手法運用>実働）だけ警告して集計から除外する。
+    if (row.actualMinutes != null && row.methodOpsMinutes != null && row.methodOpsMinutes > row.actualMinutes) { warnings.push('実働欄の手法運用が実働を超過'); row.actualInvalid = true; }
+    row.actualEligible = row.actualMinutes != null && row.methodOpsMinutes != null && !row.actualInvalid;
     if (row.evidencePrepMinutes == null) warnings.push('Evidence Package準備時間欠落');
     row.code.breakdownEligible = validateCodeBreakdown(row, warnings);
     if (!row.classification) warnings.push('4分類欠落');
@@ -247,6 +254,22 @@ function countQualityMisses() {
   return { count: readFileSync(frictionPath, 'utf8').split('\n').filter((line) => /^-\s*\d{4}-\d{2}-\d{2}/.test(line.trim()) && /品質漏れ/.test(line)).length, exists: true };
 }
 
+// 実働欄の集計（純関数）。有効行 = actualEligible（文法適合かつ手法運用 ≦ 実働）。欠測・文法外・制約違反は除外。
+// 手法運用比率は重み付き比（手法運用合計 ÷ 実働合計）で行別平均比ではない（セッション長の重みを保つため）。
+export function aggregateActual(rows) {
+  const eligible = rows.filter((row) => row.actualEligible);
+  const actualSum = eligible.reduce((total, row) => total + row.actualMinutes, 0);
+  const methodOpsSum = eligible.reduce((total, row) => total + row.methodOpsMinutes, 0);
+  return {
+    recorded: eligible.length,
+    total: rows.length,
+    actualSum,
+    methodOpsSum,
+    average: eligible.length ? actualSum / eligible.length : null,
+    ratio: actualSum ? methodOpsSum / actualSum : null,
+  };
+}
+
 function main() {
   const { rows, parseWarnings } = collectFooters(listDirectionFiles());
   if (rows.length === 0) console.log('実測フッターが見つかりませんでした（~/dev-notes 不在、または対象0件）。');
@@ -279,6 +302,10 @@ function main() {
   console.log(`- plan平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.plan.minutes != null).map((row) => row.evidence.plan.minutes))}`);
   console.log(`- code平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.code.minutes != null).map((row) => row.evidence.code.minutes))}`);
   console.log(`- E2E平均分: ${average(e2eRows.map((row) => row.evidence.e2eMinutes))}`);
+  const actual = aggregateActual(evidenceRows.map((row) => row.evidence));
+  console.log(`- 実働記録件数: ${actual.recorded}/${actual.total}`);
+  console.log(`- 実働平均分: ${actual.average == null ? '該当なし' : actual.average.toFixed(1)}`);
+  console.log(`- 手法運用比率: ${actual.ratio == null ? '該当なし' : ratio(actual.methodOpsSum, actual.actualSum)}`);
   console.log(`- Evidence Package準備平均分（テスト時間は含めない）: ${average(preparedRows.map((row) => row.evidence.evidencePrepMinutes))}`);
   console.log(`- R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: ${[0, 1, 2, 3].map((index) => sum(classifiedRows.map((row) => row.evidence.classification[index]))).join(' / ')}`);
   console.log(`- 並列Ask件数（旧形式）: ${parallelRows.length}`);
@@ -288,4 +315,5 @@ function main() {
   console.log(frictionExists ? `- friction.md 品質漏れエントリ件数: ${qualityMissCount}` : '- friction.md が見つかりませんでした（0件として扱う）');
 }
 
-main();
+// 直接実行時のみ集計を出力する。import 時は parseFooter を副作用なしで公開する（Evidence entrypoint 用）。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

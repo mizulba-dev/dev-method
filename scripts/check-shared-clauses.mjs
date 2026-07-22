@@ -176,6 +176,12 @@ const CLAUSE_PAIRS = [
     regex: /実測: レーンAsk \/ 担当.*/,
   },
   {
+    id: '手順9: 実働欄の記載点注記（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /実働欄は direction 完了時に session-metrics の実測で記載する（報告時は省略してよい）。/,
+  },
+  {
     id: '共同レビュー: workdir準備から並列起動までの順序（team-impl両版）',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
