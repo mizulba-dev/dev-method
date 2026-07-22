@@ -27,3 +27,8 @@
 - スキル本文は配布物。このリポジトリ固有の事情（パス・リモート等）はスキルに書かず、CLAUDE.md / README に書く。
 - Claude 版と Codex 版の team-impl は運用ルールを揃える。片方だけ直すと手法が分岐するので、変更時は両方を確認する。
 - `scenario-kit` スキル本文の正本は scenario-kit リポジトリ `src/templates/SKILL.md`。更新時は全文コピー→末尾の dev-method 固有節（使い分けと転用）を再適用する。
+
+## 実装レーン
+
+- Ship は挙動に触れない変更を直接実装し、機械ゲートのみを通す。Show は数ファイル・±100行未満で高リスク基準と検知器変更に触れない変更をプレレビュー付きで実装する。それ以外、または迷う場合は Ask として direction 合意後に実装する。
+- Show のUI変更は、リポジトリroot・worktree root・モノレポ配下のscenario-kit設定とscenarioを探索し、既存の有無にかかわらず最小scenarioを準備して smoke を実走する。scenario差分も規模見積もりに含め、基準超過時はAskへ昇格する。Showのsmokeは `PASS`・`FAIL n件`・`評価不能` のいずれか（UI非変更は `対象外`）で、`未整備` は使わない。

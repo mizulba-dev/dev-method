@@ -245,7 +245,7 @@ const CLAUSE_PAIRS = [
     id: '共同レビュー: 暴走防止バックストップ（team-impl両版）',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /通常の共同ラウンド数に品質上限は設けない。ただし暴走防止バックストップとして.*/,
+    regex: /通常の共同ラウンド数に品質上限は設けない。暴走防止バックストップは code ledger の exit 3 だけを正本とし.*/,
   },
   {
     id: '共同レビュー: 実測テンプレート文法（direction ↔ team-impl claude）',
@@ -266,16 +266,16 @@ const CLAUSE_PAIRS = [
     regex: /計画\/コードのラウンド数、R1の区分別件数、pre\/cross固有・重複、plan\/code ledgerの必須2実行点・stale・eligible、plan\/code R1 outcome、Evidence Package準備時間.*/,
   },
   {
-    id: 'レビューループ: ラウンド上限を設けない方針（cross-review ↔ team-impl claude）',
+    id: 'provider: 2試行・正規化救出契約（cross-review ↔ team-impl claude）',
     fileA: 'src/plugin/skills/cross-review/SKILL.md',
     fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
-    regex: /品質優先のためラウンド数の上限は設けない/,
+    regex: /provider の起動は初回を含め最大2試行とする.*?それ未満は試行失敗として扱う。/,
   },
   {
-    id: 'レビューループ: ラウンド上限を設けない方針（cross-review ↔ team-impl codex）',
+    id: 'provider: 2試行・正規化救出契約（cross-review ↔ team-impl codex）',
     fileA: 'src/plugin/skills/cross-review/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /品質優先のためラウンド数の上限は設けない/,
+    regex: /provider の起動は初回を含め最大2試行とする.*?それ未満は試行失敗として扱う。/,
   },
   {
     id: 'reviewer: Pre-Report Gate（cross-review ↔ reviewer claude）',

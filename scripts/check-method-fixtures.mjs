@@ -9,12 +9,13 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const workRoot = join(repoRoot, '.work/2026-07-21-3-evidence-carrying-direction/method-fixtures');
+const workRoot = join(repoRoot, '.work/2026-07-22-friction-convergence-and-observability/method-fixtures');
 const runsRoot = join(workRoot, 'runs');
 const logsRoot = join(workRoot, 'logs');
 const sourceChecker = join(repoRoot, 'src/plugin/skills/direction/references/check-evidence-package.mjs');
 const reviewLogChecker = join(repoRoot, 'src/plugin/skills/cross-review/references/check-review-log.mjs');
 const methodStats = join(repoRoot, 'scripts/method-stats.mjs');
+const waitUsage = join(repoRoot, 'scripts/check-wait-usage.mjs');
 const results = [];
 
 function sha(path) {
@@ -583,6 +584,30 @@ function rawFingerprint(fx) {
   return result.stdout.trim();
 }
 
+function waitUsageFixtures() {
+  // 2026-07 の実セッション分布から時刻間隔・arguments形状だけを匿名化したfixture。
+  // 合成した呼び出し数以外は個人識別子を含まない。mailbox通知理由とtimeout以外の引数は未代表。
+  const fixtureDir = join(workRoot, 'evidence/wait-fixtures'); mkdirSync(fixtureDir, { recursive: true });
+  const writeSession = (name, timeouts) => {
+    const path = join(fixtureDir, `${name}.jsonl`);
+    const rows = timeouts.map((timeout, index) => ({
+      timestamp: new Date(Date.UTC(2026, 6, 1, 0, 0, index * 73)).toISOString(), type: 'response_item',
+      payload: { type: 'function_call', name: 'wait_agent', ...(timeout === null ? {} : { arguments: JSON.stringify({ timeout_ms: timeout }) }) },
+    }));
+    writeFileSync(path, `${rows.map(JSON.stringify).join('\n')}\n`); return path;
+  };
+  const short = run(process.execPath, [waitUsage, writeSession('short-timeout', Array(10).fill(20000))], repoRoot);
+  assertion('wb01-short-timeout-confirmed-warning', short.status === 0 && short.stdout.includes('確定警告') && short.stdout.includes('短timeout反復・確定警告'));
+  const max = run(process.execPath, [waitUsage, writeSession('max-timeout-early-return', Array(10).fill(3600000))], repoRoot);
+  assertion('wb01-max-timeout-early-return-no-warning', max.status === 0 && max.stdout.includes('確定警告') && !max.stdout.includes('短timeout反復・確定警告'));
+  const mixed = run(process.execPath, [waitUsage, writeSession('mixed-timeouts', [...Array(10).fill(3600000), ...Array(10).fill(20000)])], repoRoot);
+  assertion('wb01-mixed-counts-short-only', mixed.status === 0 && mixed.stdout.includes('短timeout 10回') && mixed.stdout.includes('短timeout反復・確定警告'));
+  const legacy = run(process.execPath, [waitUsage, writeSession('arguments-missing', Array(10).fill(null))], repoRoot);
+  assertion('wb01-arguments-missing-reference-warning', legacy.status === 0 && legacy.stdout.includes('旧ログ・参考警告') && !legacy.stdout.includes('短timeout反復・確定警告'));
+  const mixedMissing = run(process.execPath, [waitUsage, writeSession('short-and-arguments-missing', [...Array(9).fill(20000), null])], repoRoot);
+  assertion('wb01-short-and-missing-reference-warning', mixedMissing.status === 0 && mixedMissing.stdout.includes('旧ログ・参考警告') && !mixedMissing.stdout.includes('短timeout反復・確定警告'));
+}
+
 function ledgerMaterial(fx, phase, options = {}) {
   const directionHash = sha(fx.directionPath); const diff = rawFingerprint(fx);
   const material = join(fx.reviewDir, 'evidence/ledger'); mkdirSync(material, { recursive: true });
@@ -614,14 +639,18 @@ function ledgerCase(name, phase, options, expectedExit, diagnostic) {
   }
 }
 
-function appendLedgerRound(fx, eventsPath, phase, round) {
+function appendLedgerRound(fx, eventsPath, phase, round, options = {}) {
   const directionHash = sha(fx.directionPath); const diff = rawFingerprint(fx);
   const reviewers = phase === 'code' ? ['pre', 'cross'] : ['plan']; const additions = [];
   for (const reviewer of reviewers) {
     const prompt = join(fx.reviewDir, `evidence/ledger/${reviewer}-prompt-${round}.md`); const resultPath = join(fx.reviewDir, `evidence/ledger/${reviewer}-result-${round}.md`);
     writeFileSync(prompt, `prompt ${reviewer} ${round}`); writeFileSync(resultPath, `result ${reviewer} ${round}`); const promptHash = sha(prompt);
     additions.push({ event: 'review_prompt', phase, review_unit_id: fx.tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: diff, reviewer, round, session_id: `${reviewer}-session`, prompt_path: prompt, prompt_hash: promptHash });
-    additions.push({ event: 'review_result', phase, review_unit_id: fx.tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: diff, reviewer, round, session_id: `${reviewer}-session`, prompt_hash: promptHash, result_path: resultPath, result_hash: sha(resultPath), must_fix: [], should_fix: [], nit: [], readonly_violations: [], verdict: 'approve' });
+    const findings = options.findings && reviewer === reviewers[0];
+    const nits = options.nits && reviewer === reviewers[0];
+    const result = { event: 'review_result', phase, review_unit_id: fx.tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: diff, reviewer, round, session_id: `${reviewer}-session`, prompt_hash: promptHash, result_path: resultPath, result_hash: sha(resultPath), must_fix: findings ? ['fix'] : [], should_fix: [], nit: nits ? ['nit'] : [], readonly_violations: [], verdict: findings || nits ? 'needs-attention' : 'approve' };
+    if (options.missingVerdict && reviewer === reviewers[0]) delete result.verdict;
+    additions.push(result);
   }
   writeFileSync(eventsPath, `${additions.map(JSON.stringify).join('\n')}\n`, { flag: 'a' });
 }
@@ -647,6 +676,24 @@ function ledgerFixtures() {
   ledgerCase('rv02-invalid-verdict', 'code', { invalidVerdict: true }, 1, 'ledger_verdict_inconsistent');
   ledgerCase('rv02-result-missing', 'code', { missingResult: true }, 1, 'ledger_reviewer_missing');
   ledgerCase('rv02-old-unit', 'code', { oldUnit: true }, 1, 'ledger_review_unit_mismatch');
+  const r3 = initRepo('lb02-r3-continues'); const r3Events = ledgerMaterial(r3, 'plan', { findings: true });
+  appendLedgerRound(r3, r3Events, 'plan', 2, { findings: true }); appendLedgerRound(r3, r3Events, 'plan', 3, { findings: true });
+  expect('lb02-r3-continues', process.execPath, [r3.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', r3.reviewDir, '--direction', r3.directionPath, '--events', r3Events, '--execution-point', 'results-received'], r3.root, 2, 'review_attention_required', ['"rework_count":3', '"next_rework":4', '"backstop_reached":false']);
+  const r4 = initRepo('lb02-r4-backstop'); const r4Events = ledgerMaterial(r4, 'code', { findings: true });
+  for (let round = 2; round <= 4; round += 1) appendLedgerRound(r4, r4Events, 'code', round, { findings: true });
+  expect('lb02-r4-backstop', process.execPath, [r4.fixed, 'review-ledger', '--phase', 'code', '--review-dir', r4.reviewDir, '--direction', r4.directionPath, '--events', r4Events, '--execution-point', 'results-received'], r4.root, 3, 'review_backstop_reached', ['"rework_count":4', '"backstop_reached":true', '"backstop_reason":"rework"']);
+  const r5 = initRepo('lb02-r5-round-backstop'); const r5Events = ledgerMaterial(r5, 'plan', { findings: true });
+  for (let round = 2; round <= 4; round += 1) appendLedgerRound(r5, r5Events, 'plan', round);
+  appendLedgerRound(r5, r5Events, 'plan', 5, { findings: true });
+  expect('lb02-r5-round-backstop', process.execPath, [r5.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', r5.reviewDir, '--direction', r5.directionPath, '--events', r5Events, '--execution-point', 'results-received'], r5.root, 3, 'review_backstop_reached', ['"rework_count":2', '"backstop_reason":"round"']);
+  const r5Nit = initRepo('lb02-r5-nit-backstop'); const r5NitEvents = ledgerMaterial(r5Nit, 'plan', { nits: true });
+  for (let round = 2; round <= 5; round += 1) appendLedgerRound(r5Nit, r5NitEvents, 'plan', round, { nits: true });
+  expect('lb02-r5-nit-backstop', process.execPath, [r5Nit.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', r5Nit.reviewDir, '--direction', r5Nit.directionPath, '--events', r5NitEvents, '--execution-point', 'results-received'], r5Nit.root, 3, 'review_backstop_reached', ['"rework_count":0', '"backstop_reason":"round"']);
+  const r5Stale = initRepo('lb02-r5-stale-backstop'); const r5StaleEvents = ledgerMaterial(r5Stale, 'code');
+  for (let round = 2; round <= 5; round += 1) appendLedgerRound(r5Stale, r5StaleEvents, 'code', round);
+  writeFileSync(join(r5Stale.root, 'stale.txt'), 'changed\n');
+  expect('lb02-r5-stale-backstop', process.execPath, [r5Stale.fixed, 'review-ledger', '--phase', 'code', '--review-dir', r5Stale.reviewDir, '--direction', r5Stale.directionPath, '--events', r5StaleEvents, '--execution-point', 'results-received'], r5Stale.root, 3, 'review_backstop_reached', ['"rework_count":0', '"backstop_reason":"round"']);
+  assertion('lb02-r5-stale-event-recorded', readFileSync(r5StaleEvents, 'utf8').includes('"diagnostic":"stale_approved_diff"'));
   const duplicateInvocation = initRepo('rv02-duplicate-invocation'); const duplicateEvents = ledgerMaterial(duplicateInvocation, 'code');
   const duplicateHash = sha(duplicateInvocation.directionPath); const duplicateDiff = rawFingerprint(duplicateInvocation);
   const duplicateCheck = { event: 'review_ledger_check', phase: 'code', execution_point: 'results-received', invocation_id: '11111111-1111-4111-8111-111111111111', review_unit_id: duplicateInvocation.tooling.review_unit_id, direction_hash: duplicateHash, diff_fingerprint: duplicateDiff, checked_at: '2026-07-21T00:00:00Z' };
@@ -776,7 +823,7 @@ function sharedClauseFixtures() {
 
 function main() {
   rmSync(workRoot, { recursive: true, force: true }); mkdirSync(runsRoot, { recursive: true }); mkdirSync(logsRoot, { recursive: true });
-  evidenceReadinessFixtures(); packageFixtures(); manifestIntegrityFixtures(); resolverFixtures(); toolingFixtures(); detailedToolingFixtures(); ledgerFixtures();
+  evidenceReadinessFixtures(); packageFixtures(); manifestIntegrityFixtures(); resolverFixtures(); toolingFixtures(); detailedToolingFixtures(); waitUsageFixtures(); ledgerFixtures();
   reviewRuntimeStaticFixtures(); reviewParserFixtures(); methodStatsFixtures(); sharedClauseFixtures();
   const summary = { generated_at: new Date().toISOString(), total: results.length, passed: results.filter(({ passed }) => passed).length, failed: results.filter(({ passed }) => !passed).length, results };
   writeFileSync(join(workRoot, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);

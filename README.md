@@ -73,7 +73,7 @@ codex plugin add dev-method-codex@mizulba-dev
 実装・修正の依頼を受けたら、着手前にレーンを1行宣言してから作業する（判定の正本は dev-method の `direction` スキル）:
 
 - **Ship**（挙動に触れない: typo・docs・コメント・ログ文言・依存 patch 更新・自明な設定値変更）: 直接実装し、機械ゲート（lint・build・該当テスト）のみ。レビューなし
-- **Show**（数ファイル・±100行未満、高リスク基準*に触れず、検知器の新設・変更でもない）: 直接実装し、プレレビューを must-fix / should-fix ゼロまで。Codex は現在の `spawn_agent` schema に `agent_type` があり `reviewer` が利用可能 role に見えれば `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` が無い環境では3 role 定義がセッション開始前から同期済みの場合に限り reviewer TOML の役割本文を同梱し、モデル配分不成立（親モデル継承）を記録する。role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更を含み既存シナリオでカバーできるなら `scenario-kit smoke` を機械ゲートに加え、実測に `smoke <PASS|FAIL n件|評価不能|対象外|未整備>` を記録する（新規シナリオが要るなら省略可で `未整備`、UI に見える変更が無ければ `対象外`）
+- **Show**（数ファイル・±100行未満、高リスク基準*に触れず、検知器の新設・変更でもない）: 直接実装し、プレレビューを must-fix / should-fix ゼロまで。Codex は現在の `spawn_agent` schema に `agent_type` があり `reviewer` が利用可能 role に見えれば `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` が無い環境では3 role 定義がセッション開始前から同期済みの場合に限り reviewer TOML の役割本文を同梱し、モデル配分不成立（親モデル継承）を記録する。role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更ではリポジトリroot・worktree root・モノレポ配下を探索し、既存シナリオの有無にかかわらず既存・軽微な変種または最小scenarioを準備して `scenario-kit smoke` を実走する。scenario差分も規模へ含め、超過時はAskへ昇格する。実測は `smoke <PASS|FAIL n件|評価不能|対象外>` とし、UI変更では `未整備` を使わない（UI非変更は `対象外`）
 - **Ask**（それ以外、高リスク基準*、検知器の新設・変更）: `direction` スキルを起動して計画から
 - *高リスク基準 = DB migration・並行処理・認可・セキュリティ・境界間契約
 - 迷ったら重い側のレーンに倒す。ユーザーがレーンを明示指定したら判定を省略する

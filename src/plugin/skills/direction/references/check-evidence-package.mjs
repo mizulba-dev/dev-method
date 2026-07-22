@@ -569,9 +569,9 @@ function resolveLocalFile(base, specifier) {
 }
 
 const REGISTERED_REPOSITORY_RESOLVERS = new Map([
-  ['scripts/check-method-fixtures.mjs', 'b0c9441f8dde5870dc1c64958cfaf890f3d51d37960e96e0d11acc4ab51ddf50'],
+  ['scripts/check-method-fixtures.mjs', '03eea3157fada15720c6883efc21c3a1a9863fa3c759b87de2d0ced8f8a730c8'],
   ['scripts/check-model-map.mjs', '70dd476fe2be1b86a8e86adad725f435b8384b19736e6361fbcb8b4364518772'],
-  ['scripts/check-shared-clauses.mjs', 'b5c45e194e2304f43a48dd267ca84bc75367e673f495f697df262b52c517ebfe'],
+  ['scripts/check-shared-clauses.mjs', '2b8a987860d7b787cf15a68a69220221ec8a41c609723d91e6def40e553e05c0'],
 ]);
 
 function resolveOracleInputs(root, command) {
@@ -1080,11 +1080,38 @@ function reviewLedger(reviewDir, directionPath, options) {
   if (latestFingerprints.size !== 1) fail('ledger_round_mismatch', '最新ラウンドの承認対象指紋が不一致です');
   const latestActionable = latest.reduce((sum, result) => sum + result.must_fix.length + result.should_fix.length, 0);
   const latestVerdictMissing = phase === 'code' && latest.some(({ verdict }) => verdict === undefined);
+  const rounds = [...new Set(results.map(({ round }) => round))];
+  const reworkCount = rounds.filter((round) => results.filter((result) => result.round === round)
+    .some((result) => result.must_fix.length + result.should_fix.length > 0)).length;
+  const latestUnresolved = latest.some(({ verdict }) => verdict === 'needs-attention')
+    || latestVerdictMissing
+    || (phase === 'plan' && latest.some(({ direction_hash }) => direction_hash !== directionHash))
+    || (phase === 'code' && [...latestFingerprints][0] !== currentFingerprint);
+  const latestStaleDiagnostic = phase === 'plan' && latest.some(({ direction_hash }) => direction_hash !== directionHash)
+    ? 'stale_approved_plan'
+    : phase === 'code' && [...latestFingerprints][0] !== currentFingerprint ? 'stale_approved_diff' : null;
+  const backstopReason = reworkCount >= 4 ? 'rework' : rounds.length >= 5 && latestUnresolved ? 'round' : null;
+  const reworkState = {
+    rework_count: reworkCount,
+    next_rework: reworkCount + 1,
+    backstop_reached: backstopReason !== null,
+    backstop_reason: backstopReason,
+  };
+  if (backstopReason !== null) {
+    if (latestStaleDiagnostic) {
+      appendJsonLineAtomic(eventsPath, {
+        event: 'review_ledger_stale', phase, diagnostic: latestStaleDiagnostic, invocation_id: invocationId,
+        review_unit_id: tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: currentFingerprint,
+        detected_at: new Date().toISOString(),
+      });
+    }
+    throw new DiagnosticError('review_backstop_reached', '差し戻しバックストップに到達したため、未解決指摘を添えて停止してください', 3, reworkState);
+  }
   if (latest.some(({ verdict }) => verdict === 'needs-attention') || (latestVerdictMissing && latestActionable > 0)) {
-    throw new DiagnosticError('review_attention_required', '指摘を反映して次ラウンドへ進んでください', 2);
+    throw new DiagnosticError('review_attention_required', '指摘を反映して次ラウンドへ進んでください', 2, reworkState);
   }
   if (latestVerdictMissing) {
-    throw new DiagnosticError('verdict_missing', '指摘ゼロですがreviewer結果のverdictが欠落しているため再レビューが必要です', 2);
+    throw new DiagnosticError('verdict_missing', '指摘ゼロですがreviewer結果のverdictが欠落しているため再レビューが必要です', 2, reworkState);
   }
   if (phase === 'plan' && latest.some(({ direction_hash }) => direction_hash !== directionHash)) {
     appendJsonLineAtomic(eventsPath, {
@@ -1124,7 +1151,7 @@ function reviewLedger(reviewDir, directionPath, options) {
     const finalLabel = phase === 'plan' ? '合意直前' : '完了直前';
     eligibilityToken = `${label} ${resultLabel}${observedResults}/${expectedResults}・${finalLabel}${observedFinal}/${expectedFinal}・stale${staleCount}・eligible=true`;
   }
-  process.stdout.write(`${JSON.stringify({ ok: true, phase, execution_point: point, invocation_id: invocationId, review_unit_id: tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: currentFingerprint, round: latestRound, ...(eligibilityToken ? { eligibility_token: eligibilityToken } : {}) })}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: true, phase, execution_point: point, invocation_id: invocationId, review_unit_id: tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: currentFingerprint, round: latestRound, ...reworkState, ...(eligibilityToken ? { eligibility_token: eligibilityToken } : {}) })}\n`);
 }
 
 function revoke(reviewDir, supersededBy) {

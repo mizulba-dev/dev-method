@@ -78,15 +78,17 @@ verify が exit 0 のときだけ、verify JSON の全境界manifest絶対パス
 
 このゲートは team-impl が Ask の共同レビューとして呼ぶ経路だけに適用する。Show のプレレビューと、セカンドオピニオンとして単独起動する cross-review に Ask 専用の tooling manifest / Evidence Package を要求しない。
 
+provider の起動は初回を含め最大2試行とする。`400 model not supported` のときだけ同じ外部 CLI でモデル指定を外す既存経路へ進み、429・5xx・quota・unavailable のときだけ起動環境が列挙できる同じ外部モデルファミリーの別の利用可能な最上位モデルへ切り替える。これらは排他的に扱い、同じ失敗条件を反復しない。救出結果から全必須fieldを持つ正規化JSONを作り、schema・verdict/findings整合・diff指紋を検証できた場合だけproviderを再実行せず、それ未満は試行失敗として扱う。2試行目も失敗した、または適格な代替がない場合は fail-closed で停止する。ユーザーが単独レビューの継続を明示許可した場合だけ標準 code ledger を実行せず、承認発言・省略対象・理由を逸脱記録と非canonical footerへ残してパーサ警告を維持する。この縮退は作業継続を妨げないが、同一版二者承認・ledger eligible・dogfood適格を満たしたとは記録しない。
+
 ### ラウンド帳簿とセッション継続
 
 R1 はプレレビュー・cross-review ともタスクごとの新規独立 session/thread で起動する。R1 の起動イベント、session/thread ID、全文 prompt、返却結果、read-only 監査、tooling manifest の `review_unit_id`、現行 direction 本文 SHA-256、開始時・返却時・受領時の diff 指紋を canonical review-dir の Evidence Package へ記録する。旧 review unit の prompt・結果・イベント・review-required 判断を、同じ diff 指紋であっても新しい review-dir へ転記しない。
 
 R2 以降のプレレビューは R1 と同じ reviewer サブエージェントへの `followup_task`、cross-review は R1 と同じ provider session/thread の resume を使う。再開 prompt には新しい diff 指紋、前回 findings、対応内容、変更ファイル、更新された Evidence Package と上記の作業単位入力をすべて渡し、read-only の tools 制約を再指定するか、継承された制約をログから確認する。session/thread ID を取得できない、resume に失敗する、または read-only 制約を確認できない場合は、その reviewer の旧承認を失効させて新規 session/thread を起動し、新規起動イベントと理由を含む逸脱記録の両方を残す。別 session へ黙って切り替えず、片方の旧承認も流用しない。
 
-両レビュー結果を受領した直後に `node <tooling-manifestのchecker絶対パス> review-ledger --phase code --review-dir <canonical review-dir絶対パス> --direction <現行direction絶対パス> --events <canonical review-dir/evidence/review-events.jsonl絶対パス> --execution-point results-received`、共同ラウンドの完了判定直前に同じコマンドの `--execution-point before-completion` を実行する。各実行は checker が検査前に原子的に先書きする invocation ID・phase・実行点付きの自己イベントを同じ events ファイルへ保存する。exit 1 は帳簿異常なので指摘反映・次ラウンド判断・完了判定のすべてを拒否する。exit 2 は帳簿が整合した反復継続であり、指摘が1件でもあれば verdict 欠落との併発有無にかかわらず全指摘を1バッチで反映する。指摘ゼロの verdict 欠落または `stale_approved_diff` なら本文をさらに変更せず、次の共同レビューだけを起動する。両者が現行指紋へ `approve`、must-fix / should-fix がゼロ、read-only 逸脱ゼロの exit 0 だけが完了判定を許す。
+両レビュー結果を受領した直後に `node <tooling-manifestのchecker絶対パス> review-ledger --phase code --review-dir <canonical review-dir絶対パス> --direction <現行direction絶対パス> --events <canonical review-dir/evidence/review-events.jsonl絶対パス> --execution-point results-received`、共同ラウンドの完了判定直前に同じコマンドの `--execution-point before-completion` を実行する。各実行は checker が検査前に原子的に先書きする invocation ID・phase・実行点付きの自己イベントを同じ events ファイルへ保存する。exit 1 は帳簿異常なので指摘反映・次ラウンド判断・完了判定のすべてを拒否する。exit 2 は帳簿が整合した反復継続であり、指摘が1件でもあれば verdict 欠落との併発有無にかかわらず全指摘を1バッチで反映する。exit 3 は backstop 到達であり、stderr JSON の `details.rework_count`・`next_rework`・`backstop_reached`・`backstop_reason` を正本として停止し、未解決指摘とともにユーザー判断へ戻す。指摘ゼロの verdict 欠落または `stale_approved_diff` なら本文をさらに変更せず、次の共同レビューだけを起動する。両者が現行指紋へ `approve`、must-fix / should-fix がゼロ、read-only 逸脱ゼロの exit 0 だけが完了判定を許す。
 
-code ledger では各返却の `approve` を must-fix / should-fix ゼロ、`needs-attention` を1件以上の場合だけ許す。片方の `needs-attention`、返却結果内の verdict 欠落、または最終承認後だけ現行 diff が変わった `stale_approved_diff` は exit 2 とする。approve と指摘の併存、needs-attention と指摘ゼロ、verdict の文法外値、同一ラウンド内の指紋不整合、reviewer 結果イベント自体の欠落、作業単位・direction hash・session/thread・新規起動イベント・逸脱記録・read-only 監査の不整合は exit 1 とする。verdict 欠落と指摘が併発した exit 2 は指摘反映を優先し、既知の exit 2 以外を次ラウンドへ流さない。
+code ledger では各返却の `approve` を must-fix / should-fix ゼロ、`needs-attention` を1件以上の場合だけ許す。片方の `needs-attention`、返却結果内の verdict 欠落、または最終承認後だけ現行 diff が変わった `stale_approved_diff` は exit 2 とする。actionable findings を持つラウンドだけを `rework_count` に数え、3回到達時は `next_rework=4` で継続可、4回目の差し戻しまたは5ラウンド未収束は exit 3 とする。approve と指摘の併存、needs-attention と指摘ゼロ、verdict の文法外値、同一ラウンド内の指紋不整合、reviewer 結果イベント自体の欠落、作業単位・direction hash・session/thread・新規起動イベント・逸脱記録・read-only 監査の不整合は exit 1 とする。verdict 欠落と指摘が併発した exit 2 は指摘反映を優先し、既知の exit 2 以外を次ラウンドへ流さない。
 
 共同ラウンドは、先に `cross-review` の手順1〜2だけを実行して作業ディレクトリ・helper・開始時 diff 指紋を準備し、次に reviewer を spawn し、その起動後に完了を待たず `cross-review` の手順3以降を開始する。
 
@@ -106,7 +108,7 @@ R2 以降は例外なく、前回指摘への対応と前回指紋からの変�
 
 nit はループの終了条件にせず、各ラウンドで検出された nit は修正を求めず蓄積して、ループ終了時に最終報告へ一括で列挙する（採否は完了後にユーザーが判断する。数行で直せる nit をリーダーがその場で直すことは妨げないが、nit のためだけに追加ラウンドを起動しない）。
 
-通常の共同ラウンド数に品質上限は設けない。ただし暴走防止バックストップとして、5ラウンド収束しない、または同一タスクの差し戻しが3回を超えたら停止し、未解決指摘とともにユーザーへ報告する。
+通常の共同ラウンド数に品質上限は設けない。暴走防止バックストップは code ledger の exit 3 だけを正本とし、4回目の差し戻しまたは5ラウンド未収束で停止する。round 数を差し戻し数と混同せず、未解決指摘と ledger details を添えてユーザーへ報告する。
 
 ## 報告様式
 
