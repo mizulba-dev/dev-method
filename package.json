@@ -1,6 +1,6 @@
 {
   "name": "dev-method",
-  "version": "0.1.53",
+  "version": "0.1.54",
   "private": true,
   "description": "個人開発手法プラグイン（Claude Code / Codex 両対応）",
   "scripts": {
