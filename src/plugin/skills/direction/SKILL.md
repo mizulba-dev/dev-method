@@ -44,7 +44,7 @@ direction ファイルの置き場を次の優先順で決める:
 4. 本文構成: 背景・診断 → 決定（番号付き・要点太字）→ 却下した代替案（理由付き）→ 実装計画。
 5. 実装計画は**並列境界別の実装ブリーフ**まで落とす。変更マップがモノレポ内の複数サブシステム（BE / FE / インフラ等）にまたがる場合は、`並列境界:` 宣言が無くても境界候補（ディレクトリ単位＋worktree 分離）を計画に明記してユーザーと合意する — 黙って1ブリーフに畳まない。implementer がこのブリーフ＋名指しファイル＋対象リポジトリの CLAUDE.md / AGENTS.md だけで着手できる状態が完成条件:
    - **Evidence Contract**: Ask の利用者または境界に見える契約は `##### EC-<境界略称>-<連番>: <契約名>` の安定IDを付け、`振る舞い`・`変更面`・`oracle`・`反証`・`証拠種別`・`証拠` の6つの固定ラベルを持たせる。証拠種別は契約ID単位で `automated` または `review-required` のどちらか一方だけを選ぶ。機械検証できる側面と人の判断が必要な側面は別IDへ分ける。`review-required` は括弧内へ `理由:` と `残余リスク:` を必ず書く。補助ファイルや内部実装詳細ごとにはIDを増やさず、既存の契約・oracle記述をIDで対応付ける
-   - Evidence共有契約: Askでは canonical review-dir の絶対パス、tooling manifestの`format_version`・`review_unit_id`・固定diff指紋実装、全境界Evidence Packageを全worktree・全ラウンドで共有する。完了条件と故意ずれは固定checkerのrecordだけから記録し、合意前計画レビューは更新後全文を全指摘ゼロまで再読、コード共同レビューR2以降は同じsession/threadを継続する。旧review unitの証跡・承認は転記せず、実測footerはplan/code/E2E/ledger/Evidence準備/4分類の固定文法を使う
+   - Evidence共有契約: Askでは canonical review-dir の絶対パス、tooling manifestの`format_version`・`review_unit_id`・固定diff指紋実装、全境界Evidence Packageを全worktree・全ラウンドで共有する。direction承認hashは固定checkerが`状態:`・`実測:`の各1行だけを除外して作る規範本文hashとし、この2行へ規範情報を書かない。完了条件のexit 0 baselineと、`--mutation`名・期待非ゼロexitを持つ故意ずれは固定checkerのrecordだけから各1件以上記録する。合意前計画レビューは更新後全文を全指摘ゼロまで再読、コード共同レビューR2以降は同じsession/threadを継続する。旧review unitの証跡・承認は転記せず、実測footerはplan/code/E2E/ledger/Evidence準備/4分類の固定文法を使う
    - 高リスク role は、高リスク基準に触れる契約・ファイル・完了条件を最小の高リスク編集面へ分けて局所割り当てし、基準に触れない編集面は `implementer` へ割り当てる。その理由だけで同じリポジトリ境界の通常変更へ伝播させない。通常ブリーフと編集面が独立なら worktree で並列にし、同一ファイルまたは同一不変条件へ不可分に混在するときだけブリーフ全体を `implementer-high` とする。
    - **契約**: API スキーマ・エラー挙動・上限値など、境界間にまたがる決定は確定値で書く。設定値・資源識別子を変更または設定化する場合は、許容範囲と正規化・項目間制約・複数の設定源が競合したときの優先順位を確定する。状態を書き換える機能では、直接 API に加えて同じ状態へ書き込む全経路（編成する workflow tool・間接書込）と部分成功（途中失敗時の残留状態）まで列挙する — cache 無効化・整合性確認の対象はこの列挙から導く
    - **横断関心の振り分け**: 権限（IAM 等）・環境差（preview/prod の配線に加え、ローカルエミュレータ・モックと実サービスの挙動差。例: SQS エミュレータが実 AWS と違うパラメータ制約を持つ）・ライフサイクル（作成物の削除・掃除）・負荷特性（ストリーミング・上限）・文言とアクセシブル名の i18n（UI 文言・aria-label・既定文言のロケール追従）の5つを各境界で確認し、契約／完了条件／やらないことのどれかに必ず振り分ける。実装後にリーダーが思いつく検証は、計画時に振り分け損ねた横断関心であることが多い
@@ -54,7 +54,7 @@ direction ファイルの置き場を次の優先順で決める:
      - 定型観点として毎回確認する:
        - **境界間のパラメータ伝播**: 入口で受けた値が末端まで実際に通ることを検知する（空通し・既定値への黙殺を含む）。設定値・資源識別子では、正規化・項目間制約・設定源の優先順位を別々の失敗クラスで確認する
        - **新設分岐の網羅**: タイブレーク・フォールバック等、追加した分岐ごとの退行を検知する
-       - **UI に見える変更の smoke 要否**: Ask の smoke は、共同レビュー収束後に implementer の全量完了条件が green になった安定版へ、リーダーが `scenario-kit smoke` を1回だけ実行する最終証跡の機械ゲートとする。既存シナリオまたは軽微な変種で覆える場合だけ実行し、新規シナリオ・helper・assertion・検知器の実装が必要なら `未整備` として別 follow-up へ分け、シナリオ変更をプロダクトの実装境界や共同レビュー diff へ混ぜない（scenario-kit 自体が中心成果のタスクを除く）。UI に見える変更を含まないなら「対象外」と明記する。実走した場合は exit code・`report.json`・video パスを実測フッターへ引き継ぐ
+       - **UI に見える変更の smoke 要否**: Ask の smoke は、共同レビュー収束後に implementer の全量完了条件が green になった安定版へ、リーダーが `scenario-kit smoke` を1回だけ実行する最終証跡の機械ゲートとする。Ask の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。新規実装が必要と判明したら `未整備` として別 follow-up へ分ける（scenario-kit 自体が中心成果のタスクを除く）。実走後に固定checkerのverifyとcode ledger `before-completion`を再実行し、smoke中の追跡済み・非ignore未追跡差分発生をfail-closedにする。UI に見える変更を含まないなら「対象外」と明記する。実走した場合は exit code・`report.json`・video パスを実測フッターへ引き継ぐ
      - 変更の本丸が既存テストの無い場所（UI コンポーネント等）に落ちる場合は、テスト手法の当たり（無理なら実機確認へ割り当てる旨）まで計画で決める
      - 実行可能な検知器（テスト基盤・検証スクリプト・パーサ・品質ゲート）を新設・変更する場合は、正常系に加えて検知器が担保する契約の制約ごとに少なくとも1つの失敗クラスと故意ずれ検体を対応付け、期待する非ゼロ終了または診断を確認する。1種類の文字列変更だけで済ませず、適用対象に応じて未登録・件数差・正規化差・文法外値など、実装を別々に壊す入力を選ぶ。AST・lint・grep 等の静的検知器では、対象言語で意味が等価な参照・alias・bind・分割代入・computed 形式等の迂回面を列挙し、receiver を識別できない場合の意図的な過検知範囲と代替手段を契約へ固定する。代表的な迂回と正当コードの誤検知を別クラスで確認する
      - 検体のライフサイクルは implementer 定義の規定と同じ: 対象リポジトリの `.work/<作業名>/`（cross-review の作業ディレクトリと同じ）配下にファイル一式として残しレビュー完了（cross-review 収束）まで削除せず、適用時は元ファイルを cp でバックアップして復元はバックアップからのコピーで行う（未コミット変更がある作業ツリーで `git checkout` / `git restore` による復元をしない）
@@ -79,11 +79,11 @@ Ask の direction は、ユーザーへ合意を求める前に、実行中ク�
 
 外部レビューの実行中は、起動機構に対応する完了通知またはブロッキング待機（Codexの統合exec sessionなら `write_stdin` による長待機）を使い、関係のないagent mailbox待機や短timeoutのpollを繰り返さない。providerの試行は初回を含め最大2回とする。`400 model not supported` では同じ外部CLIでモデル指定を外して2回目を実行し、429・5xx・quota・unavailableでは起動環境が列挙できる同じ外部モデルファミリーの別の利用可能な最上位モデルへ2回目を切り替える。同じ失敗条件を反復せず、表層JSONが壊れていても必須fieldをすべて回収して正規化JSONへ変換し、schemaとverdict/findings整合を検証できるなら再実行しない。2回目も失敗したら合意へ進まず、利用可能な計画レビュー経路の復旧をユーザーへ求める。
 
-対象リポジトリの `.work/<direction basename>/` を作業ディレクトリとし、各ラウンドのプロンプトを `plan-review-prompt-<N>.md`、結果を `plan-review-<N>.md`、Codex のイベントログを `plan-review-<N>.log`、帳簿を `review-ledger.jsonl` に置く。各prompt・結果・帳簿イベントへtooling manifestの`review_unit_id`、レビュー対象direction本文SHA-256、providerのsession/thread ID、全prompt/結果ファイルの内容SHA-256を記録する。プロンプトには direction 全文、対象リポジトリ、関連する親方針・先行 direction・PaPut の過去決定など判断に必要な文脈を含める。観点は未決事項・契約矛盾・検証 oracle の漏れ・スコープ・高リスク編集面の境界だけに限定し、実装方法やコードスタイルへ広げない。出力は must-fix / should-fix / nit と承認可否を区別させ、ファイル変更・検証コマンド・別レビューを禁止する。
+対象リポジトリの `.work/<direction basename>/` を作業ディレクトリとし、各ラウンドのプロンプトを `plan-review-prompt-<N>.md`、結果を固定`review-ledger-schema.json`の`resultDocument`に適合する `plan-review-<N>.json`、Codex のイベントログを `plan-review-<N>.log`、帳簿を `review-ledger.jsonl` に置く。promptイベントは固定checkerの`ledger-prompt`、resultイベントは固定checkerの`ledger-result`だけで生成し、JSONLを手書きしない。両コマンドへphase・reviewer・round・session IDとファイル絶対パスを渡し、checkerが`review_unit_id`、規範本文hash、diff指紋、内容hashを導出する。プロンプトには direction 全文、対象リポジトリ、関連する親方針・先行 direction・PaPut の過去決定など判断に必要な文脈を含める。観点は未決事項・契約矛盾・検証 oracle の漏れ・スコープ・高リスク編集面の境界だけに限定し、実装方法やコードスタイルへ広げない。出力は must-fix / should-fix / nit と承認可否を区別させ、ファイル変更・検証コマンド・別レビューを禁止する。
 
 レビューの must-fix / should-fix / nit は direction へ反映し、全区分がゼロになった版だけを合意へ出す。R2以降は上記の`claude --resume` / `codex exec ... resume`でR1と同じsession/threadをread-only制約付きで再開し、更新後direction全文をR1と同じ全観点から再読させる。各resultイベントには空配列を含むread-only監査結果を必須記録する。前回指摘と対応内容も含めるが、その範囲だけに限定しない。ID取得不能、resume失敗、ID不一致、read-only再指定・監査の欠落時は旧承認を失効し、新規session起動イベントと逸脱記録が揃うまでfail-closedで停止する。レビューによって契約が変わっても合意前なので追補に数えない。異モデルのレビューを実行できない場合は合意へ進まず、利用可能なレビュー経路の復旧をユーザーへ依頼する。
 
-各ラウンド結果受領後に `node <固定checker> review-ledger --phase plan --review-dir <絶対パス> --direction <direction絶対パス> --events <review-ledger.jsonl絶対パス> --execution-point results-received`、ユーザーへの合意依頼直前に同じコマンドのexecution pointだけを`before-agreement`として実行する。checkerは検査前に自身の実行イベントを原子的に先書きする。exit 0は同一review unit・本文hash・session/thread・全指摘ゼロの帳簿整合、exit 2は指摘残存または`stale_approved_plan`による次ラウンド、exit 3は4回目の差し戻しまたは5ラウンド未収束のbackstop、exit 1は帳簿異常である。exit 1/2では合意へ進まず、exit 3では未解決指摘とledger detailsを添えてユーザー判断へ戻す。
+各ラウンド結果受領後に `node <固定checker> review-ledger --phase plan --round <N> --review-dir <絶対パス> --direction <direction絶対パス> --events <review-ledger.jsonl絶対パス> --execution-point results-received`、ユーザーへの合意依頼直前に同じroundを指定してexecution pointだけを`before-agreement`として実行する。checkerは検査前にround付き試行イベントを原子的に先書きし、帳簿検証を完了したexit 0/2/3だけにpassedイベント、構造異常のexit 1にはfailedイベントを対応付ける。最終判定はpassedの結果受領checkpointだけを全result roundと1対1照合する。exit 0は同一review unit・規範本文hash・session/thread・全指摘ゼロの帳簿整合、exit 2は指摘残存または`stale_approved_plan`による次ラウンド、exit 3は4回目の差し戻しまたは5ラウンド未収束のbackstop、exit 1は帳簿異常である。exit 1/2では合意へ進まず、exit 3では未解決指摘とledger detailsを添えてユーザー判断へ戻す。
 
 ## 合意と実装
 
@@ -92,7 +92,7 @@ Ask の direction は、ユーザーへ合意を求める前に、実行中ク�
 
 ## 完了
 
-1. `状態:` 行を **完了（日付）** に更新し、実装・同一 diff 指紋へのプレレビュー／`cross-review` 二者承認・リリースの到達点と、残っているスコープ外事項を1〜2文で書く。
+1. `状態:` 行を **完了（日付）** に更新し、実装・同一 diff 指紋へのプレレビュー／`cross-review` 二者承認・リリースの到達点と、残っているスコープ外事項を1〜2文で書く。この行と次の`実測:`行は固定checkerの規範本文hash対象外であり、契約・スコープ・検証条件など承認対象の情報は書かない。
 2. 状態行の下に実測フッターを1行追記する（team-impl の完了報告があればそれを転記。数値は概算でよい）:
 
    `実測: レーンAsk / レビュー計画1R・21分（R1 must0+should0+nit0） / レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0） / ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true / ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true / R1 plan approved / R1 code approved / E2E 44分 / Evidence Package 準備2分（開始10:00・終了10:02；テスト5分） / 4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0 / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`

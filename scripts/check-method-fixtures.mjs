@@ -5,11 +5,14 @@ import {
   chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const workRoot = join(repoRoot, '.work/2026-07-22-friction-convergence-and-observability/method-fixtures');
+const selfPath = fileURLToPath(import.meta.url);
+const repoRoot = resolve(dirname(selfPath), '..');
+const workBase = join(repoRoot, '.work');
+mkdirSync(workBase, { recursive: true });
+const workRoot = mkdtempSync(join(workBase, 'method-fixtures-'));
 const runsRoot = join(workRoot, 'runs');
 const logsRoot = join(workRoot, 'logs');
 const sourceChecker = join(repoRoot, 'src/plugin/skills/direction/references/check-evidence-package.mjs');
@@ -17,6 +20,13 @@ const reviewLogChecker = join(repoRoot, 'src/plugin/skills/cross-review/referenc
 const methodStats = join(repoRoot, 'scripts/method-stats.mjs');
 const waitUsage = join(repoRoot, 'scripts/check-wait-usage.mjs');
 const results = [];
+
+if (process.argv[2] === '--root-probe') {
+  const started = Date.now();
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  process.stdout.write(`${JSON.stringify({ root: workRoot, started, ended: Date.now() })}\n`);
+  process.exit(0);
+}
 
 function sha(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -70,7 +80,12 @@ function initRepo(name, direction = directionText(['target.txt']), files = { 'ta
   git(root, ['config', 'user.name', 'Method Fixture']);
   const directionPath = join(root, `${name}.md`);
   writeFileSync(directionPath, direction);
-  for (const [relativePath, body] of Object.entries(files)) {
+  const fixtureFiles = {
+    '.fixture-baseline.mjs': 'console.log("1 pass, 0 fail");\n',
+    '.fixture-mutation.mjs': 'process.exit(1);\n',
+    ...files,
+  };
+  for (const [relativePath, body] of Object.entries(fixtureFiles)) {
     const path = join(root, relativePath);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, body);
@@ -82,6 +97,32 @@ function initRepo(name, direction = directionText(['target.txt']), files = { 'ta
   const toolingPath = join(reviewDir, 'evidence/tooling/tooling-manifest.json');
   const tooling = JSON.parse(readFileSync(toolingPath));
   return { root, directionPath, reviewDir, fixed: tooling.files.checker.path, tooling, toolingPath };
+}
+
+function recordEvidencePair(name, fx, manifest, contract = 'EC-FX-01') {
+  expect(`${name}-baseline`, process.execPath, [fx.fixed, 'record', '--review-dir', fx.reviewDir, '--contract', contract,
+    '--manifest', manifest, '--', process.execPath, '.fixture-baseline.mjs'], fx.root, 0);
+  expect(`${name}-mutation`, process.execPath, [fx.fixed, 'record', '--review-dir', fx.reviewDir, '--contract', contract,
+    '--manifest', manifest, '--expect-exit', '1', '--mutation', 'intentional-drift', '--', process.execPath, '.fixture-mutation.mjs'], fx.root, 0);
+}
+
+function recordMutation(name, fx, manifest, contract = 'EC-FX-01') {
+  expect(`${name}-mutation`, process.execPath, [fx.fixed, 'record', '--review-dir', fx.reviewDir, '--contract', contract,
+    '--manifest', manifest, '--expect-exit', '1', '--mutation', 'intentional-drift', '--', process.execPath, '.fixture-mutation.mjs'], fx.root, 0);
+}
+
+function evidencePairRequirementFixtures() {
+  const baselineOnly = initRepo('ev02-baseline-only');
+  const baselineManifest = join(baselineOnly.reviewDir, 'evidence/manifests/EC-FX-01.json');
+  expect('ev02-baseline-only-prepare', process.execPath, [baselineOnly.fixed, 'prepare', '--review-dir', baselineOnly.reviewDir, '--direction', baselineOnly.directionPath, '--contract', 'EC-FX-01', '--manifest', baselineManifest], baselineOnly.root, 0);
+  expect('ev02-baseline-only-record', process.execPath, [baselineOnly.fixed, 'record', '--review-dir', baselineOnly.reviewDir, '--contract', 'EC-FX-01', '--manifest', baselineManifest, '--', process.execPath, '.fixture-baseline.mjs'], baselineOnly.root, 0);
+  expect('ev02-mutation-missing', process.execPath, [baselineOnly.fixed, 'verify', '--review-dir', baselineOnly.reviewDir, '--direction', baselineOnly.directionPath, '--manifest', baselineManifest], baselineOnly.root, 1, 'automated_mutation_missing');
+
+  const mutationOnly = initRepo('ev02-mutation-only');
+  const mutationManifest = join(mutationOnly.reviewDir, 'evidence/manifests/EC-FX-01.json');
+  expect('ev02-mutation-only-prepare', process.execPath, [mutationOnly.fixed, 'prepare', '--review-dir', mutationOnly.reviewDir, '--direction', mutationOnly.directionPath, '--contract', 'EC-FX-01', '--manifest', mutationManifest], mutationOnly.root, 0);
+  recordMutation('ev02-mutation-only', mutationOnly, mutationManifest);
+  expect('ev02-baseline-missing', process.execPath, [mutationOnly.fixed, 'verify', '--review-dir', mutationOnly.reviewDir, '--direction', mutationOnly.directionPath, '--manifest', mutationManifest], mutationOnly.root, 1, 'automated_baseline_missing');
 }
 
 function withBackup(path, mutate, specimen, callback) {
@@ -138,6 +179,7 @@ function packageFixtures() {
     && bootstrapRecord.initial_evidence_refs?.[0]?.path === initialEvidence
     && bootstrapRecord.initial_evidence_refs?.[0]?.sha256 === sha(initialEvidence));
   expect('ev02-initial-evidence-missing', process.execPath, [fx.fixed, 'record', '--review-dir', fx.reviewDir, '--contract', 'EC-FX-01', '--manifest', manifest, '--initial-evidence-ref', join(fx.root, 'missing-evidence.json'), '--', process.execPath, 'entry.mjs'], fx.root, 1, 'initial_evidence_missing');
+  recordEvidencePair('ev02-pair', fx, manifest);
   expect('ev02-verify', process.execPath, [fx.fixed, 'verify', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--manifest', manifest], fx.root, 0);
   withBackup(initialEvidence, () => writeFileSync(initialEvidence, '{"initial":false}\n'), join(fx.reviewDir, 'evidence/specimens/initial-evidence-stale.json'), () => {
     expect('ev02-initial-evidence-stale', process.execPath, [fx.fixed, 'verify', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--manifest', manifest], fx.root, 1, 'initial_evidence_stale');
@@ -178,6 +220,7 @@ function manifestIntegrityFixtures() {
     const id = `EC-FX-0${index + 1}`;
     expect(`ev02-contract-set-${id}-prepare`, process.execPath, [setFx.fixed, 'prepare', '--review-dir', setFx.reviewDir, '--direction', setFx.directionPath, '--contract', id, '--manifest', manifests[index]], setFx.root, 0);
     expect(`ev02-contract-set-${id}-record`, process.execPath, [setFx.fixed, 'record', '--review-dir', setFx.reviewDir, '--contract', id, '--manifest', manifests[index], '--', process.execPath, 'entry.mjs'], setFx.root, 0);
+    recordMutation(`ev02-contract-set-${id}`, setFx, manifests[index], id);
   }
   expect('ev02-contract-set-missing', process.execPath, [setFx.fixed, 'verify', '--review-dir', setFx.reviewDir, '--direction', setFx.directionPath, '--manifest', manifests[0]], setFx.root, 1, 'evidence_contract_set_mismatch');
   expect('ev02-contract-set-duplicate', process.execPath, [setFx.fixed, 'verify', '--review-dir', setFx.reviewDir, '--direction', setFx.directionPath, '--manifest', manifests[0], '--manifest', manifests[0], '--manifest', manifests[1]], setFx.root, 1, 'evidence_contract_duplicate');
@@ -192,6 +235,7 @@ function manifestIntegrityFixtures() {
   writeFileSync(join(schemaFx.root, 'target.txt'), 'after\n'); const manifest = join(schemaFx.reviewDir, 'evidence/manifests/EC-FX-01.json');
   expect('ev02-schema-prepare', process.execPath, [schemaFx.fixed, 'prepare', '--review-dir', schemaFx.reviewDir, '--direction', schemaFx.directionPath, '--contract', 'EC-FX-01', '--manifest', manifest], schemaFx.root, 0);
   expect('ev02-schema-record', process.execPath, [schemaFx.fixed, 'record', '--review-dir', schemaFx.reviewDir, '--contract', 'EC-FX-01', '--manifest', manifest, '--', process.execPath, 'entry.mjs'], schemaFx.root, 0);
+  recordMutation('ev02-schema', schemaFx, manifest);
   for (const [name, mutate] of [
     ['top-additional', (value) => { value.extra = true; }],
     ['required-missing', (value) => { delete value.boundary; }],
@@ -246,6 +290,7 @@ function manifestIntegrityFixtures() {
   const falseGreenManifest = join(falseGreen.reviewDir, 'evidence/manifests/EC-FX-01.json');
   expect('ev03-fail-count-prepare', process.execPath, [falseGreen.fixed, 'prepare', '--review-dir', falseGreen.reviewDir, '--direction', falseGreen.directionPath, '--contract', 'EC-FX-01', '--manifest', falseGreenManifest], falseGreen.root, 0);
   expect('ev03-fail-count-record', process.execPath, [falseGreen.fixed, 'record', '--review-dir', falseGreen.reviewDir, '--contract', 'EC-FX-01', '--manifest', falseGreenManifest, '--', process.execPath, 'entry.mjs'], falseGreen.root, 0);
+  recordMutation('ev03-fail-count', falseGreen, falseGreenManifest);
   expect('ev03-fail-count-baseline-red', process.execPath, [falseGreen.fixed, 'verify', '--review-dir', falseGreen.reviewDir, '--direction', falseGreen.directionPath, '--manifest', falseGreenManifest], falseGreen.root, 1, 'record_failed');
   withBackup(falseGreenManifest, () => {
     const value = JSON.parse(readFileSync(falseGreenManifest)); value.contracts[0].records[0].fail_count = 0; writeFileSync(falseGreenManifest, `${JSON.stringify(value, null, 2)}\n`);
@@ -257,6 +302,7 @@ function manifestIntegrityFixtures() {
   writeFileSync(join(bypass.root, 'target.txt'), 'after\n'); const bypassManifest = join(bypass.reviewDir, 'evidence/manifests/EC-FX-01.json');
   expect('ev03-unverified-tamper-prepare', process.execPath, [bypass.fixed, 'prepare', '--review-dir', bypass.reviewDir, '--direction', bypass.directionPath, '--contract', 'EC-FX-01', '--manifest', bypassManifest], bypass.root, 0);
   expect('ev03-unverified-tamper-record', process.execPath, [bypass.fixed, 'record', '--review-dir', bypass.reviewDir, '--contract', 'EC-FX-01', '--manifest', bypassManifest, '--expect-exit', '1', '--', process.execPath, 'entry.mjs'], bypass.root, 0);
+  recordEvidencePair('ev03-unverified-tamper-pair', bypass, bypassManifest);
   withBackup(bypassManifest, () => { const value = JSON.parse(readFileSync(bypassManifest)); value.contracts[0].input_scope = 'explicit'; value.contracts[0].oracle_inputs = []; value.contracts[0].unverified = []; writeFileSync(bypassManifest, JSON.stringify(value)); }, join(bypass.reviewDir, 'evidence/specimens/unverified-cleared.json'), () => {
     expect('ev03-unverified-tamper-rejected', process.execPath, [bypass.fixed, 'verify', '--review-dir', bypass.reviewDir, '--direction', bypass.directionPath, '--manifest', bypassManifest], bypass.root, 1, 'record_inputs_tampered');
   });
@@ -268,6 +314,7 @@ function manifestIntegrityFixtures() {
   writeFileSync(join(multiple.root, 'target.txt'), 'after\n'); const multipleManifest = join(multiple.reviewDir, 'evidence/manifests/EC-FX-01.json');
   expect('ev03-multiple-prepare', process.execPath, [multiple.fixed, 'prepare', '--review-dir', multiple.reviewDir, '--direction', multiple.directionPath, '--contract', 'EC-FX-01', '--manifest', multipleManifest], multiple.root, 0);
   for (const entry of ['one.mjs', 'two.mjs']) expect(`ev03-multiple-record-${entry}`, process.execPath, [multiple.fixed, 'record', '--review-dir', multiple.reviewDir, '--contract', 'EC-FX-01', '--manifest', multipleManifest, '--', process.execPath, entry], multiple.root, 0);
+  recordMutation('ev03-multiple', multiple, multipleManifest);
   expect('ev03-multiple-verify', process.execPath, [multiple.fixed, 'verify', '--review-dir', multiple.reviewDir, '--direction', multiple.directionPath, '--manifest', multipleManifest], multiple.root, 0);
   assertion('ev03-multiple-union', ['one.mjs', 'one-leaf.mjs', 'two.mjs', 'two-leaf.mjs'].every((path) => JSON.parse(readFileSync(multipleManifest)).contracts[0].oracle_inputs.some((input) => input.path === path)));
 
@@ -290,6 +337,7 @@ function resolverFixture(name, source, expectedVerify = 0, diagnostic = null, ex
   const manifest = join(fx.reviewDir, 'evidence/manifests/EC-FX-01.json');
   expect(`${name}-prepare`, process.execPath, [fx.fixed, 'prepare', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--contract', 'EC-FX-01', '--manifest', manifest], fx.root, 0);
   expect(`${name}-record`, process.execPath, [fx.fixed, 'record', '--review-dir', fx.reviewDir, '--contract', 'EC-FX-01', '--manifest', manifest, '--expect-exit', String(expectedCommandExit), '--', process.execPath, 'entry.mjs'], fx.root, 0);
+  recordEvidencePair(`${name}-pair`, fx, manifest);
   expect(`${name}-verify`, process.execPath, [fx.fixed, 'verify', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--manifest', manifest], fx.root, expectedVerify, diagnostic);
   return JSON.parse(readFileSync(manifest)).contracts[0];
 }
@@ -328,6 +376,7 @@ function resolverFixtures() {
   const runnerManifest = join(runner.reviewDir, 'evidence/manifests/EC-FX-01.json');
   expect('ev03-runner-prepare', process.execPath, [runner.fixed, 'prepare', '--review-dir', runner.reviewDir, '--direction', runner.directionPath, '--contract', 'EC-FX-01', '--manifest', runnerManifest], runner.root, 0);
   expect('ev03-runner-record', process.execPath, [runner.fixed, 'record', '--review-dir', runner.reviewDir, '--contract', 'EC-FX-01', '--manifest', runnerManifest, '--', '/usr/bin/true'], runner.root, 0);
+  recordMutation('ev03-runner', runner, runnerManifest);
   expect('ev03-runner-repository', process.execPath, [runner.fixed, 'verify', '--review-dir', runner.reviewDir, '--direction', runner.directionPath, '--manifest', runnerManifest], runner.root, 0);
   const runnerContract = JSON.parse(readFileSync(runnerManifest)).contracts[0];
   assertion('ev03-runner-repository-scope', runnerContract.input_scope === 'repository', { scope: runnerContract.input_scope });
@@ -439,11 +488,12 @@ function detailedToolingFixtures() {
   mkdirSync(distributionDirection, { recursive: true }); mkdirSync(distributionCross, { recursive: true });
   copyFileSync(sourceChecker, join(distributionDirection, 'check-evidence-package.mjs'));
   copyFileSync(join(repoRoot, 'src/plugin/skills/direction/references/evidence-package-schema.json'), join(distributionDirection, 'evidence-package-schema.json'));
+  copyFileSync(join(repoRoot, 'src/plugin/skills/direction/references/review-ledger-schema.json'), join(distributionDirection, 'review-ledger-schema.json'));
   copyFileSync(join(repoRoot, 'src/plugin/skills/cross-review/references/review-diff-fingerprint.mjs'), join(distributionCross, 'review-diff-fingerprint.mjs'));
   const isolatedReview = join(distribution.root, '.work/isolated-unit');
   expect('ev04-isolated-distribution-bootstrap', process.execPath, [join(distributionDirection, 'check-evidence-package.mjs'), 'bootstrap', '--review-dir', isolatedReview], distribution.root, 0);
   const isolatedTooling = JSON.parse(readFileSync(join(isolatedReview, 'evidence/tooling/tooling-manifest.json')));
-  assertion('ev04-fixed-minimal-header', isolatedTooling.format_version === 1 && /^[0-9a-f-]{36}$/i.test(isolatedTooling.review_unit_id));
+  assertion('ev04-fixed-minimal-header', isolatedTooling.format_version === 2 && /^[0-9a-f-]{36}$/i.test(isolatedTooling.review_unit_id));
   assertion('ev04-realpath-fixed-fingerprint', isolatedTooling.files.fingerprint.path === join(isolatedReview, 'evidence/tooling/review-diff-fingerprint.mjs'));
   rmSync(distributionRoot, { recursive: true });
   expect('ev04-isolated-fixed-tooling-survives-source-removal', process.execPath, [isolatedTooling.files.checker.path, 'direction', '--review-dir', isolatedReview, '--direction', distribution.directionPath], distribution.root, 1, 'review_dir_direction_mismatch');
@@ -572,7 +622,7 @@ function detailedToolingFixtures() {
     ['prepare', [revokedModes.fixed, 'prepare', '--review-dir', revokedModes.reviewDir, '--direction', revokedModes.directionPath, '--contract', 'EC-FX-01', '--manifest', revokedManifest]],
     ['record', [revokedModes.fixed, 'record', '--review-dir', revokedModes.reviewDir, '--contract', 'EC-FX-01', '--manifest', revokedManifest, '--', process.execPath, 'missing.mjs']],
     ['verify', [revokedModes.fixed, 'verify', '--review-dir', revokedModes.reviewDir, '--direction', revokedModes.directionPath, '--manifest', revokedManifest]],
-    ['review-ledger', [revokedModes.fixed, 'review-ledger', '--review-dir', revokedModes.reviewDir, '--direction', revokedModes.directionPath, '--phase', 'plan', '--events', join(revokedModes.reviewDir, 'events.jsonl'), '--execution-point', 'results-received']],
+    ['review-ledger', [revokedModes.fixed, 'review-ledger', '--review-dir', revokedModes.reviewDir, '--direction', revokedModes.directionPath, '--phase', 'plan', '--round', '1', '--events', join(revokedModes.reviewDir, 'events.jsonl'), '--execution-point', 'results-received']],
   ];
   for (const [mode, command] of commands) expect(`ev04-revoked-block-${mode}`, process.execPath, command, revokedModes.root, 1, 'revoked_review_unit');
 }
@@ -609,50 +659,71 @@ function waitUsageFixtures() {
 }
 
 function ledgerMaterial(fx, phase, options = {}) {
-  const directionHash = sha(fx.directionPath); const diff = rawFingerprint(fx);
   const material = join(fx.reviewDir, 'evidence/ledger'); mkdirSync(material, { recursive: true });
-  const events = [];
+  const eventsPath = join(material, 'events.jsonl');
   const reviewers = phase === 'code' ? ['pre', 'cross'] : ['plan'];
   for (const reviewer of reviewers) {
-    const prompt = join(material, `${reviewer}-prompt.md`); const resultPath = join(material, `${reviewer}-result.md`);
-    writeFileSync(prompt, `prompt ${reviewer}`); writeFileSync(resultPath, `result ${reviewer}`);
-    const promptHash = sha(prompt);
-    events.push({ event: 'review_prompt', phase, review_unit_id: options.oldUnit ? '00000000-0000-4000-8000-000000000000' : fx.tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: options.badFingerprint && reviewer === 'cross' ? '1'.repeat(64) : diff, reviewer, round: 1, session_id: `${reviewer}-session`, prompt_path: prompt, prompt_hash: promptHash });
+    const prompt = join(material, `${reviewer}-prompt.md`); const resultPath = join(material, `${reviewer}-result.json`);
+    writeFileSync(prompt, `prompt ${reviewer}`);
+    expect(`ledger-${basename(fx.root)}-${reviewer}-prompt`, process.execPath,
+      [fx.fixed, 'ledger-prompt', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--phase', phase,
+        '--events', eventsPath, '--reviewer', reviewer, '--round', '1', '--session-id', `${reviewer}-session`, '--prompt', prompt], fx.root, 0);
     if (!(options.missingResult && reviewer === 'cross')) {
-      const value = { event: 'review_result', phase, review_unit_id: options.oldUnit ? '00000000-0000-4000-8000-000000000000' : fx.tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: options.badFingerprint && reviewer === 'cross' ? '1'.repeat(64) : diff, reviewer, round: 1, session_id: `${reviewer}-session`, prompt_hash: promptHash, result_path: resultPath, result_hash: sha(resultPath), must_fix: options.findings && reviewer === reviewers[0] ? ['fix'] : [], should_fix: [], nit: [], readonly_violations: [] };
-      if (options.missingReadonly && reviewer === reviewers[0]) delete value.readonly_violations;
-      if (!options.missingVerdict || reviewer !== reviewers[0]) value.verdict = options.invalidVerdict && reviewer === reviewers[0] ? 'maybe' : options.findings && reviewer === reviewers[0] ? 'needs-attention' : 'approve';
-      events.push(value);
+      const findings = options.findings && reviewer === reviewers[0];
+      const nits = options.nits && reviewer === reviewers[0];
+      const actionable = findings || (phase === 'plan' && nits);
+      writeFileSync(resultPath, `${JSON.stringify({ verdict: actionable ? 'needs-attention' : 'approve', must_fix: findings ? ['fix'] : [], should_fix: [], nit: nits ? ['nit'] : [], readonly_violations: [] })}\n`);
+      expect(`ledger-${basename(fx.root)}-${reviewer}-result`, process.execPath,
+        [fx.fixed, 'ledger-result', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--phase', phase,
+          '--events', eventsPath, '--reviewer', reviewer, '--round', '1', '--session-id', `${reviewer}-session`, '--result', resultPath], fx.root, 0);
     }
   }
-  const path = join(material, 'events.jsonl'); writeFileSync(path, `${events.map(JSON.stringify).join('\n')}\n`); return path;
+  if (options.oldUnit || options.badFingerprint || options.missingReadonly || options.missingVerdict || options.invalidVerdict || options.contentMismatch) {
+    const events = readFileSync(eventsPath, 'utf8').trim().split('\n').map(JSON.parse);
+    for (const event of events) {
+      if (options.oldUnit) event.review_unit_id = '00000000-0000-4000-8000-000000000000';
+      if (options.badFingerprint && event.reviewer === 'cross') event.diff_fingerprint = '1'.repeat(64);
+      if (event.event !== 'review_result' || event.reviewer !== reviewers[0]) continue;
+      const body = JSON.parse(readFileSync(event.result_path, 'utf8'));
+      if (options.missingReadonly) { delete body.readonly_violations; delete event.readonly_violations; }
+      if (options.missingVerdict) { delete body.verdict; delete event.verdict; }
+      if (options.invalidVerdict) { body.verdict = 'maybe'; event.verdict = 'maybe'; }
+      if (options.contentMismatch) { body.verdict = 'needs-attention'; body.must_fix = ['body-only finding']; }
+      writeFileSync(event.result_path, `${JSON.stringify(body)}\n`);
+      event.result_hash = sha(event.result_path);
+    }
+    writeFileSync(eventsPath, `${events.map(JSON.stringify).join('\n')}\n`);
+  }
+  return eventsPath;
 }
 
 function ledgerCase(name, phase, options, expectedExit, diagnostic) {
   const fx = initRepo(name);
   const events = ledgerMaterial(fx, phase, options);
   if (options.staleDiff) writeFileSync(join(fx.root, 'target.txt'), 'changed after approval\n');
-  expect(name, process.execPath, [fx.fixed, 'review-ledger', '--phase', phase, '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--events', events, '--execution-point', 'results-received'], fx.root, expectedExit, diagnostic);
+  expect(name, process.execPath, [fx.fixed, 'review-ledger', '--phase', phase, '--round', '1', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--events', events, '--execution-point', 'results-received'], fx.root, expectedExit, diagnostic);
   if (expectedExit === 0) {
     const finalPoint = phase === 'plan' ? 'before-agreement' : 'before-completion';
-    expect(`${name}-final`, process.execPath, [fx.fixed, 'review-ledger', '--phase', phase, '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--events', events, '--execution-point', finalPoint], fx.root, 0, null, ['"eligibility_token"']);
+    expect(`${name}-final`, process.execPath, [fx.fixed, 'review-ledger', '--phase', phase, '--round', '1', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--events', events, '--execution-point', finalPoint], fx.root, 0, null, ['"eligibility_token"']);
   }
 }
 
 function appendLedgerRound(fx, eventsPath, phase, round, options = {}) {
-  const directionHash = sha(fx.directionPath); const diff = rawFingerprint(fx);
-  const reviewers = phase === 'code' ? ['pre', 'cross'] : ['plan']; const additions = [];
+  const reviewers = phase === 'code' ? ['pre', 'cross'] : ['plan'];
   for (const reviewer of reviewers) {
-    const prompt = join(fx.reviewDir, `evidence/ledger/${reviewer}-prompt-${round}.md`); const resultPath = join(fx.reviewDir, `evidence/ledger/${reviewer}-result-${round}.md`);
-    writeFileSync(prompt, `prompt ${reviewer} ${round}`); writeFileSync(resultPath, `result ${reviewer} ${round}`); const promptHash = sha(prompt);
-    additions.push({ event: 'review_prompt', phase, review_unit_id: fx.tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: diff, reviewer, round, session_id: `${reviewer}-session`, prompt_path: prompt, prompt_hash: promptHash });
+    const prompt = join(fx.reviewDir, `evidence/ledger/${reviewer}-prompt-${round}.md`); const resultPath = join(fx.reviewDir, `evidence/ledger/${reviewer}-result-${round}.json`);
+    writeFileSync(prompt, `prompt ${reviewer} ${round}`);
+    expect(`ledger-${basename(fx.root)}-${reviewer}-r${round}-prompt`, process.execPath,
+      [fx.fixed, 'ledger-prompt', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--phase', phase,
+        '--events', eventsPath, '--reviewer', reviewer, '--round', String(round), '--session-id', `${reviewer}-session`, '--prompt', prompt], fx.root, 0);
     const findings = options.findings && reviewer === reviewers[0];
     const nits = options.nits && reviewer === reviewers[0];
-    const result = { event: 'review_result', phase, review_unit_id: fx.tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: diff, reviewer, round, session_id: `${reviewer}-session`, prompt_hash: promptHash, result_path: resultPath, result_hash: sha(resultPath), must_fix: findings ? ['fix'] : [], should_fix: [], nit: nits ? ['nit'] : [], readonly_violations: [], verdict: findings || nits ? 'needs-attention' : 'approve' };
-    if (options.missingVerdict && reviewer === reviewers[0]) delete result.verdict;
-    additions.push(result);
+    const actionable = findings || (phase === 'plan' && nits);
+    writeFileSync(resultPath, `${JSON.stringify({ verdict: actionable ? 'needs-attention' : 'approve', must_fix: findings ? ['fix'] : [], should_fix: [], nit: nits ? ['nit'] : [], readonly_violations: [] })}\n`);
+    expect(`ledger-${basename(fx.root)}-${reviewer}-r${round}-result`, process.execPath,
+      [fx.fixed, 'ledger-result', '--review-dir', fx.reviewDir, '--direction', fx.directionPath, '--phase', phase,
+        '--events', eventsPath, '--reviewer', reviewer, '--round', String(round), '--session-id', `${reviewer}-session`, '--result', resultPath], fx.root, 0);
   }
-  writeFileSync(eventsPath, `${additions.map(JSON.stringify).join('\n')}\n`, { flag: 'a' });
 }
 
 function ledgerFixtures() {
@@ -660,45 +731,70 @@ function ledgerFixtures() {
   ledgerCase('pl01-findings', 'plan', { findings: true }, 2, 'review_attention_required');
   ledgerCase('pl01-old-unit', 'plan', { oldUnit: true }, 1, 'ledger_review_unit_mismatch');
   const stale = initRepo('pl01-stale'); const events = ledgerMaterial(stale, 'plan');
-  expect('pl01-stale-first', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'results-received'], stale.root, 0);
+  expect('pl01-stale-first', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--round', '1', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'results-received'], stale.root, 0);
   writeFileSync(stale.directionPath, `${readFileSync(stale.directionPath, 'utf8')}\nchanged\n`);
-  expect('pl01-stale', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'before-agreement'], stale.root, 2, 'stale_approved_plan');
+  expect('pl01-stale', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--round', '1', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'before-agreement'], stale.root, 2, 'stale_approved_plan');
   appendLedgerRound(stale, events, 'plan', 2);
-  expect('pl01-r2-updated-direction-same-session', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'results-received'], stale.root, 0);
-  expect('pl01-r2-final-token', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'before-agreement'], stale.root, 0, null, ['ledger plan 結果受領2/2・合意直前2/2・stale1・eligible=true']);
+  expect('pl01-r2-updated-direction-same-session', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--round', '2', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'results-received'], stale.root, 0);
+  expect('pl01-r2-final-token', process.execPath, [stale.fixed, 'review-ledger', '--phase', 'plan', '--round', '2', '--review-dir', stale.reviewDir, '--direction', stale.directionPath, '--events', events, '--execution-point', 'before-agreement'], stale.root, 0, null, ['ledger plan 結果受領2/2・合意直前2/2・stale1・eligible=true']);
   ledgerCase('pl01-readonly-audit-missing', 'plan', { missingReadonly: true }, 1, 'ledger_result_invalid');
   ledgerCase('rv02-normal', 'code', {}, 0);
   ledgerCase('rv02-findings', 'code', { findings: true }, 2, 'review_attention_required');
-  ledgerCase('rv02-verdict-missing', 'code', { missingVerdict: true }, 2, 'verdict_missing');
-  ledgerCase('rv02-verdict-missing-findings', 'code', { missingVerdict: true, findings: true }, 2, 'review_attention_required');
+  ledgerCase('rv02-verdict-missing', 'code', { missingVerdict: true }, 1, 'ledger_result_invalid');
+  ledgerCase('rv02-verdict-missing-findings', 'code', { missingVerdict: true, findings: true }, 1, 'ledger_result_invalid');
   ledgerCase('rv02-stale-diff', 'code', { staleDiff: true }, 2, 'stale_approved_diff');
   ledgerCase('rv02-round-fingerprint', 'code', { badFingerprint: true }, 1, 'ledger_round_mismatch');
-  ledgerCase('rv02-invalid-verdict', 'code', { invalidVerdict: true }, 1, 'ledger_verdict_inconsistent');
+  ledgerCase('rv02-invalid-verdict', 'code', { invalidVerdict: true }, 1, 'ledger_result_invalid');
+  ledgerCase('rv02-result-content-mismatch', 'code', { contentMismatch: true }, 1, 'ledger_result_content_mismatch');
   ledgerCase('rv02-result-missing', 'code', { missingResult: true }, 1, 'ledger_reviewer_missing');
+  const recovery = initRepo('rv02-result-missing-recovery'); const recoveryEvents = ledgerMaterial(recovery, 'code', { missingResult: true });
+  expect('rv02-result-missing-recovery-first', process.execPath, [recovery.fixed, 'review-ledger', '--phase', 'code', '--round', '1', '--review-dir', recovery.reviewDir, '--direction', recovery.directionPath, '--events', recoveryEvents, '--execution-point', 'results-received'], recovery.root, 1, 'ledger_reviewer_missing');
+  const recoveredResult = join(recovery.reviewDir, 'evidence/ledger/cross-result-recovered.json');
+  writeFileSync(recoveredResult, `${JSON.stringify({ verdict: 'approve', must_fix: [], should_fix: [], nit: [], readonly_violations: [] })}\n`);
+  expect('rv02-result-missing-recovery-generate', process.execPath, [recovery.fixed, 'ledger-result', '--review-dir', recovery.reviewDir, '--direction', recovery.directionPath, '--phase', 'code', '--events', recoveryEvents, '--reviewer', 'cross', '--round', '1', '--session-id', 'cross-session', '--result', recoveredResult], recovery.root, 0);
+  expect('rv02-result-missing-recovery-retry', process.execPath, [recovery.fixed, 'review-ledger', '--phase', 'code', '--round', '1', '--review-dir', recovery.reviewDir, '--direction', recovery.directionPath, '--events', recoveryEvents, '--execution-point', 'results-received'], recovery.root, 0);
+  expect('rv02-result-missing-recovery-final', process.execPath, [recovery.fixed, 'review-ledger', '--phase', 'code', '--round', '1', '--review-dir', recovery.reviewDir, '--direction', recovery.directionPath, '--events', recoveryEvents, '--execution-point', 'before-completion'], recovery.root, 0);
   ledgerCase('rv02-old-unit', 'code', { oldUnit: true }, 1, 'ledger_review_unit_mismatch');
+  const lifecycle = initRepo('pl01-lifecycle-metadata'); const lifecycleEvents = ledgerMaterial(lifecycle, 'plan');
+  writeFileSync(lifecycle.directionPath, `${readFileSync(lifecycle.directionPath, 'utf8')}状態: 完了\n実測: smoke 対象外\n`);
+  expect('pl01-lifecycle-metadata-hash-stable', process.execPath, [lifecycle.fixed, 'review-ledger', '--phase', 'plan', '--round', '1', '--review-dir', lifecycle.reviewDir, '--direction', lifecycle.directionPath, '--events', lifecycleEvents, '--execution-point', 'results-received'], lifecycle.root, 0);
+  const normative = initRepo('pl01-normative-change'); const normativeEvents = ledgerMaterial(normative, 'plan');
+  writeFileSync(normative.directionPath, `${readFileSync(normative.directionPath, 'utf8')}\n規範変更\n`);
+  expect('pl01-normative-change-stale', process.execPath, [normative.fixed, 'review-ledger', '--phase', 'plan', '--round', '1', '--review-dir', normative.reviewDir, '--direction', normative.directionPath, '--events', normativeEvents, '--execution-point', 'results-received'], normative.root, 2, 'stale_approved_plan');
+  const wrongCheckpoint = initRepo('rv02-checkpoint-round'); const wrongCheckpointEvents = ledgerMaterial(wrongCheckpoint, 'code');
+  appendLedgerRound(wrongCheckpoint, wrongCheckpointEvents, 'code', 2);
+  expect('rv02-checkpoint-round-mismatch', process.execPath, [wrongCheckpoint.fixed, 'review-ledger', '--phase', 'code', '--round', '1', '--review-dir', wrongCheckpoint.reviewDir, '--direction', wrongCheckpoint.directionPath, '--events', wrongCheckpointEvents, '--execution-point', 'results-received'], wrongCheckpoint.root, 1, 'ledger_checkpoint_round_mismatch');
+  const completion = initRepo('rv02-completion-marker'); const completionEvents = ledgerMaterial(completion, 'code');
+  expect('rv02-completion-results', process.execPath, [completion.fixed, 'review-ledger', '--phase', 'code', '--round', '1', '--review-dir', completion.reviewDir, '--direction', completion.directionPath, '--events', completionEvents, '--execution-point', 'results-received'], completion.root, 0);
+  expect('rv02-completion-final', process.execPath, [completion.fixed, 'review-ledger', '--phase', 'code', '--round', '1', '--review-dir', completion.reviewDir, '--direction', completion.directionPath, '--events', completionEvents, '--execution-point', 'before-completion'], completion.root, 0);
+  const completionMarker = JSON.parse(readFileSync(join(completion.reviewDir, 'review-unit-complete.json')));
+  assertion('rv02-completion-marker-bound', completionMarker.format_version === 2
+    && completionMarker.review_unit_id === completion.tooling.review_unit_id
+    && /^[a-f0-9]{64}$/.test(completionMarker.direction_hash)
+    && /^[a-f0-9]{64}$/.test(completionMarker.diff_fingerprint));
   const r3 = initRepo('lb02-r3-continues'); const r3Events = ledgerMaterial(r3, 'plan', { findings: true });
   appendLedgerRound(r3, r3Events, 'plan', 2, { findings: true }); appendLedgerRound(r3, r3Events, 'plan', 3, { findings: true });
-  expect('lb02-r3-continues', process.execPath, [r3.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', r3.reviewDir, '--direction', r3.directionPath, '--events', r3Events, '--execution-point', 'results-received'], r3.root, 2, 'review_attention_required', ['"rework_count":3', '"next_rework":4', '"backstop_reached":false']);
+  expect('lb02-r3-continues', process.execPath, [r3.fixed, 'review-ledger', '--phase', 'plan', '--round', '3', '--review-dir', r3.reviewDir, '--direction', r3.directionPath, '--events', r3Events, '--execution-point', 'results-received'], r3.root, 2, 'review_attention_required', ['"rework_count":3', '"next_rework":4', '"backstop_reached":false']);
   const r4 = initRepo('lb02-r4-backstop'); const r4Events = ledgerMaterial(r4, 'code', { findings: true });
   for (let round = 2; round <= 4; round += 1) appendLedgerRound(r4, r4Events, 'code', round, { findings: true });
-  expect('lb02-r4-backstop', process.execPath, [r4.fixed, 'review-ledger', '--phase', 'code', '--review-dir', r4.reviewDir, '--direction', r4.directionPath, '--events', r4Events, '--execution-point', 'results-received'], r4.root, 3, 'review_backstop_reached', ['"rework_count":4', '"backstop_reached":true', '"backstop_reason":"rework"']);
+  expect('lb02-r4-backstop', process.execPath, [r4.fixed, 'review-ledger', '--phase', 'code', '--round', '4', '--review-dir', r4.reviewDir, '--direction', r4.directionPath, '--events', r4Events, '--execution-point', 'results-received'], r4.root, 3, 'review_backstop_reached', ['"rework_count":4', '"backstop_reached":true', '"backstop_reason":"rework"']);
   const r5 = initRepo('lb02-r5-round-backstop'); const r5Events = ledgerMaterial(r5, 'plan', { findings: true });
   for (let round = 2; round <= 4; round += 1) appendLedgerRound(r5, r5Events, 'plan', round);
   appendLedgerRound(r5, r5Events, 'plan', 5, { findings: true });
-  expect('lb02-r5-round-backstop', process.execPath, [r5.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', r5.reviewDir, '--direction', r5.directionPath, '--events', r5Events, '--execution-point', 'results-received'], r5.root, 3, 'review_backstop_reached', ['"rework_count":2', '"backstop_reason":"round"']);
+  expect('lb02-r5-round-backstop', process.execPath, [r5.fixed, 'review-ledger', '--phase', 'plan', '--round', '5', '--review-dir', r5.reviewDir, '--direction', r5.directionPath, '--events', r5Events, '--execution-point', 'results-received'], r5.root, 3, 'review_backstop_reached', ['"rework_count":2', '"backstop_reason":"round"']);
   const r5Nit = initRepo('lb02-r5-nit-backstop'); const r5NitEvents = ledgerMaterial(r5Nit, 'plan', { nits: true });
   for (let round = 2; round <= 5; round += 1) appendLedgerRound(r5Nit, r5NitEvents, 'plan', round, { nits: true });
-  expect('lb02-r5-nit-backstop', process.execPath, [r5Nit.fixed, 'review-ledger', '--phase', 'plan', '--review-dir', r5Nit.reviewDir, '--direction', r5Nit.directionPath, '--events', r5NitEvents, '--execution-point', 'results-received'], r5Nit.root, 3, 'review_backstop_reached', ['"rework_count":0', '"backstop_reason":"round"']);
+  expect('lb02-r5-nit-backstop', process.execPath, [r5Nit.fixed, 'review-ledger', '--phase', 'plan', '--round', '5', '--review-dir', r5Nit.reviewDir, '--direction', r5Nit.directionPath, '--events', r5NitEvents, '--execution-point', 'results-received'], r5Nit.root, 3, 'review_backstop_reached', ['"rework_count":0', '"backstop_reason":"round"']);
   const r5Stale = initRepo('lb02-r5-stale-backstop'); const r5StaleEvents = ledgerMaterial(r5Stale, 'code');
   for (let round = 2; round <= 5; round += 1) appendLedgerRound(r5Stale, r5StaleEvents, 'code', round);
   writeFileSync(join(r5Stale.root, 'stale.txt'), 'changed\n');
-  expect('lb02-r5-stale-backstop', process.execPath, [r5Stale.fixed, 'review-ledger', '--phase', 'code', '--review-dir', r5Stale.reviewDir, '--direction', r5Stale.directionPath, '--events', r5StaleEvents, '--execution-point', 'results-received'], r5Stale.root, 3, 'review_backstop_reached', ['"rework_count":0', '"backstop_reason":"round"']);
+  expect('lb02-r5-stale-backstop', process.execPath, [r5Stale.fixed, 'review-ledger', '--phase', 'code', '--round', '5', '--review-dir', r5Stale.reviewDir, '--direction', r5Stale.directionPath, '--events', r5StaleEvents, '--execution-point', 'results-received'], r5Stale.root, 3, 'review_backstop_reached', ['"rework_count":0', '"backstop_reason":"round"']);
   assertion('lb02-r5-stale-event-recorded', readFileSync(r5StaleEvents, 'utf8').includes('"diagnostic":"stale_approved_diff"'));
   const duplicateInvocation = initRepo('rv02-duplicate-invocation'); const duplicateEvents = ledgerMaterial(duplicateInvocation, 'code');
   const duplicateHash = sha(duplicateInvocation.directionPath); const duplicateDiff = rawFingerprint(duplicateInvocation);
-  const duplicateCheck = { event: 'review_ledger_check', phase: 'code', execution_point: 'results-received', invocation_id: '11111111-1111-4111-8111-111111111111', review_unit_id: duplicateInvocation.tooling.review_unit_id, direction_hash: duplicateHash, diff_fingerprint: duplicateDiff, checked_at: '2026-07-21T00:00:00Z' };
+  const duplicateCheck = { event: 'review_ledger_check', phase: 'code', execution_point: 'results-received', round: 1, invocation_id: '11111111-1111-4111-8111-111111111111', review_unit_id: duplicateInvocation.tooling.review_unit_id, direction_hash: duplicateHash, diff_fingerprint: duplicateDiff, checked_at: '2026-07-21T00:00:00Z' };
   writeFileSync(duplicateEvents, `${JSON.stringify(duplicateCheck)}\n${JSON.stringify(duplicateCheck)}\n`, { flag: 'a' });
-  expect('rv02-duplicate-invocation', process.execPath, [duplicateInvocation.fixed, 'review-ledger', '--phase', 'code', '--review-dir', duplicateInvocation.reviewDir, '--direction', duplicateInvocation.directionPath, '--events', duplicateEvents, '--execution-point', 'results-received'], duplicateInvocation.root, 1, 'ledger_invocation_invalid');
+  expect('rv02-duplicate-invocation', process.execPath, [duplicateInvocation.fixed, 'review-ledger', '--phase', 'code', '--round', '1', '--review-dir', duplicateInvocation.reviewDir, '--direction', duplicateInvocation.directionPath, '--events', duplicateEvents, '--execution-point', 'results-received'], duplicateInvocation.root, 1, 'ledger_invocation_invalid');
 }
 
 function reviewRuntimeStaticFixtures() {
@@ -706,10 +802,25 @@ function reviewRuntimeStaticFixtures() {
   const codex = readFileSync(join(repoRoot, 'src/plugin-codex/skills/team-impl/SKILL.md'), 'utf8');
   const cross = readFileSync(join(repoRoot, 'src/plugin/skills/cross-review/SKILL.md'), 'utf8');
   const direction = readFileSync(join(repoRoot, 'src/plugin/skills/direction/SKILL.md'), 'utf8');
+  const implementerClaude = readFileSync(join(repoRoot, 'src/plugin-claude/agents/implementer.md'), 'utf8');
+  const implementerCodex = readFileSync(join(repoRoot, 'src/plugin-codex/skills/team-impl/implementer.toml'), 'utf8');
   const validator = (text) => text.includes('verify --review-dir') && text.includes('reviewer の spawn') && text.includes('source checker') && text.includes('単独起動する cross-review');
   assertion('rv01-claude-gate', validator(claude)); assertion('rv01-codex-gate', validator(codex));
   assertion('rv01-ask-gate-drift', !validator(claude.replace('verify --review-dir', 'verify-disabled')));
   assertion('rv01-standalone-backward-compatible', cross.includes('standalone') && cross.includes('Ask では') && !cross.includes('standalone では tooling manifest'));
+  const integratedReview = (text) => text.includes('全境界が揃ったら統合先へ')
+    && text.includes('cherry-pick --no-commit') && text.includes('統合先の全diffへ**共同レビュー**を1回起動する');
+  assertion('rv01-worktree-integrated-review-claude', integratedReview(claude));
+  assertion('rv01-worktree-integrated-review-codex', integratedReview(codex));
+  const deferredEvidence = (text) => text.includes('worktree分離時は兄弟checkoutのcanonical review-dirへprepare/recordせず')
+    && text.includes('統合先checkoutで全境界manifestのprepare');
+  assertion('rv01-worktree-evidence-deferred-claude', deferredEvidence(implementerClaude));
+  assertion('rv01-worktree-evidence-deferred-codex', deferredEvidence(implementerCodex));
+  assertion('rv01-cleanup-completion-marker-required', cross.includes('review-unit-complete.json')
+    && cross.includes('marker欠落・不整合') && cross.includes('自動削除しない'));
+  assertion('rv01-ledger-generator-contract', direction.includes('ledger-prompt') && direction.includes('ledger-result')
+    && direction.includes('JSONLを手書きしない'));
+  assertion('rv01-smoke-reviewed-diff-only', direction.includes('レビュー後に scenario・helper・assertion を編集しない'));
   assertion('pl02-provider-resume-static-contract', direction.includes('claude -p "$(cat <プロンプトファイル>)" --resume <R1 session ID>')
     && direction.includes('codex exec --cd <対象リポジトリ> --sandbox read-only resume <R1 thread ID>')
     && direction.includes('.work/<direction basename>/` の絶対パスそのもの') && direction.includes('read-only監査結果を必須記録'));
@@ -804,11 +915,14 @@ function methodStatsFixtures() {
     newFooter({ classification: '4分類 broken' }),
     newFooter({ classification: '4分類 plan-escape1+implementation-deviation1+evidence-gap0+new-risk0' }),
     '実測: レーンAsk / 担当x / レビュー並列1R・10分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0） / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし',
+    '実測: レーンShip / smoke PASS',
+    '実測: レーンShip / 逸脱: なし',
+    '実測: レーンShip / smoke MAYBE',
   ];
   rows.forEach((row, index) => writeFileSync(join(directionDir, `2026-07-${String(index + 1).padStart(2, '0')}-fixture.md`), `${row}\n`));
   const result = run(process.execPath, [methodStats], repoRoot, { ...process.env, HOME: home });
   const combined = `${result.stdout}\n${result.stderr}`;
-  const expected = ['Evidence新形式件数: 8', 'dogfood適格件数: 7', 'plan R1承認率（dogfood適格のみ）: 5/7 (71.4%)', 'code R1承認率（dogfood適格のみ）: 6/7 (85.7%)', 'plan平均レビュー分: 22.0', 'code平均レビュー分: 23.4', 'E2E平均分: 45.6', 'Evidence Package準備平均分（テスト時間は含めない）: 2.0', 'R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: 1 / 0 / 0 / 0', 'plan ledgerの観測数/期待数/stale/eligibleが内部不一致', 'E2E時間がplan+codeと不整合', 'Evidence Package準備時間が開始・終了との差分と不整合', '4分類文法外', '4分類合計がcode R1固有/重複合計と不整合', '並列Ask件数（旧形式）: 1'];
+  const expected = ['Evidence新形式件数: 8', 'dogfood適格件数: 7', 'plan R1承認率（dogfood適格のみ）: 5/7 (71.4%)', 'code R1承認率（dogfood適格のみ）: 6/7 (85.7%)', 'plan平均レビュー分: 22.0', 'code平均レビュー分: 23.4', 'E2E平均分: 45.6', 'Evidence Package準備平均分（テスト時間は含めない）: 2.0', 'R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: 1 / 0 / 0 / 0', 'plan ledgerの観測数/期待数/stale/eligibleが内部不一致', 'E2E時間がplan+codeと不整合', 'Evidence Package準備時間が開始・終了との差分と不整合', '4分類文法外', '4分類合計がcode R1固有/重複合計と不整合', '並列Ask件数（旧形式）: 1', 'smoke実施率: 1/12 (8.3%)', 'smoke記録不備: 未記載1件 / 文法外1件'];
   const passed = result.status === 0 && expected.every((value) => combined.includes(value));
   writeFileSync(join(logsRoot, 'ob01-method-stats.log'), combined);
   assertion('ob01-method-stats-new-old-and-drifts', passed, { exit: result.status, missing: expected.filter((value) => !combined.includes(value)) });
@@ -817,14 +931,24 @@ function methodStatsFixtures() {
   assertion('ob01-dev-notes-missing', empty.status === 0 && empty.stdout.includes('~/dev-notes 不在'));
 }
 
+function concurrentHarnessFixtures() {
+  const firstOut = join(workRoot, 'probe-first.json'); const secondOut = join(workRoot, 'probe-second.json');
+  const command = '"$1" "$2" --root-probe > "$3" & first=$!; "$1" "$2" --root-probe > "$4" & second=$!; wait "$first"; first_status=$?; wait "$second"; second_status=$?; test "$first_status" -eq 0 -a "$second_status" -eq 0';
+  const concurrent = run('sh', ['-c', command, 'method-fixture-probe', process.execPath, selfPath, firstOut, secondOut], repoRoot);
+  assertion('ob01-concurrent-harness-processes-green', concurrent.status === 0, { stderr: concurrent.stderr });
+  const first = JSON.parse(readFileSync(firstOut, 'utf8')); const second = JSON.parse(readFileSync(secondOut, 'utf8'));
+  assertion('ob01-concurrent-harness-roots-unique', first.root !== second.root && existsSync(first.root) && existsSync(second.root));
+  assertion('ob01-concurrent-harness-overlapped', first.started < second.ended && second.started < first.ended, { first, second });
+}
+
 function sharedClauseFixtures() {
   expect('ob02-shared-normal-and-all-drifts', process.execPath, [join(repoRoot, 'scripts/check-shared-clauses.mjs'), '--self-test'], repoRoot, 0, null, ['deliberate drifts detected']);
 }
 
 function main() {
-  rmSync(workRoot, { recursive: true, force: true }); mkdirSync(runsRoot, { recursive: true }); mkdirSync(logsRoot, { recursive: true });
-  evidenceReadinessFixtures(); packageFixtures(); manifestIntegrityFixtures(); resolverFixtures(); toolingFixtures(); detailedToolingFixtures(); waitUsageFixtures(); ledgerFixtures();
-  reviewRuntimeStaticFixtures(); reviewParserFixtures(); methodStatsFixtures(); sharedClauseFixtures();
+  mkdirSync(runsRoot, { recursive: true }); mkdirSync(logsRoot, { recursive: true });
+  evidenceReadinessFixtures(); packageFixtures(); evidencePairRequirementFixtures(); manifestIntegrityFixtures(); resolverFixtures(); toolingFixtures(); detailedToolingFixtures(); waitUsageFixtures(); ledgerFixtures();
+  reviewRuntimeStaticFixtures(); reviewParserFixtures(); methodStatsFixtures(); concurrentHarnessFixtures(); sharedClauseFixtures();
   const summary = { generated_at: new Date().toISOString(), total: results.length, passed: results.filter(({ passed }) => passed).length, failed: results.filter(({ passed }) => !passed).length, results };
   writeFileSync(join(workRoot, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ total: summary.total, passed: summary.passed, failed: summary.failed, summary: join(workRoot, 'summary.json') })}\n`);

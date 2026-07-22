@@ -335,13 +335,25 @@ const CLAUSE_PAIRS = [
     id: '手順8: 収束後の最終全量検証（team-impl両版）',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /レビュー収束後、コミット前に担当 implementer へ全量の完了条件コマンドを1回通し直させ.*?初回証跡のままでよい）/,
+    regex: /レビュー収束後、コミット前に統合先で担当 implementer へ全量の完了条件コマンドを1回通し直させ.*?review-unit-complete\.json`を確認してからリーダーがコミットする/,
   },
   {
     id: '並列境界: 独立境界の並列割り当て既定（team-impl両版）',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
     regex: /宣言済みの複数境界が互いに独立なら.*/,
+  },
+  {
+    id: '並列境界: worktree統合後レビュー契約（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /全境界が揃ったら統合先へ計画の依存順で各commitを.*?verify・共同レビューへ進む。/,
+  },
+  {
+    id: '手順5: worktree統合後の共同レビュー（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /worktree分離時は全境界の完了報告を待ち.*?重点観点に足す/,
   },
   {
     id: '高リスクrole: 局所割り当て（direction ↔ team-impl claude）',
@@ -359,13 +371,13 @@ const CLAUSE_PAIRS = [
     id: 'Ask smoke: 安定版への最終1回ゲート（direction ↔ team-impl claude）',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
-    regex: /Ask の smoke は、共同レビュー収束後に implementer の全量完了条件が green になった安定版へ.*?scenario-kit 自体が中心成果のタスクを除く）。/,
+    regex: /Ask の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。/,
   },
   {
     id: 'Ask smoke: 安定版への最終1回ゲート（direction ↔ team-impl codex）',
     fileA: 'src/plugin/skills/direction/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    regex: /Ask の smoke は、共同レビュー収束後に implementer の全量完了条件が green になった安定版へ.*?scenario-kit 自体が中心成果のタスクを除く）。/,
+    regex: /Ask の smoke は、既存シナリオまたは共同レビュー開始前から同じ diff に含めた軽微な変種だけを使い、レビュー後に scenario・helper・assertion を編集しない。/,
   },
   {
     id: 'implementer: 差し戻し再検証の影響範囲スコープ',
@@ -437,13 +449,13 @@ const CLAUSE_PAIRS = [
     id: 'Evidence: implementer両版のmanifest・record契約',
     fileA: 'src/plugin-claude/agents/implementer.md',
     fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
-    regex: /Evidence Packageを要求されたAskでは.*/,
+    regex: /Evidence Packageを要求されたAskでworktree分離を使わない場合は.*/,
   },
   {
     id: 'Evidence: implementer-high両版のmanifest・record契約',
     fileA: 'src/plugin-claude/agents/implementer-high.md',
     fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
-    regex: /Evidence Packageを要求されたAskでは.*/,
+    regex: /Evidence Packageを要求されたAskでworktree分離を使わない場合は.*/,
   },
 ];
 

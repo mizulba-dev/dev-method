@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mizulba.dev/dev-method/review-ledger-v2.schema.json",
+  "title": "dev-method review ledger prompt/result records",
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "stringList": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "resultDocument": {
+      "type": "object",
+      "required": ["verdict", "must_fix", "should_fix", "nit", "readonly_violations"],
+      "properties": {
+        "verdict": { "enum": ["approve", "needs-attention"] },
+        "must_fix": { "$ref": "#/$defs/stringList" },
+        "should_fix": { "$ref": "#/$defs/stringList" },
+        "nit": { "$ref": "#/$defs/stringList" },
+        "readonly_violations": { "$ref": "#/$defs/stringList" }
+      },
+      "additionalProperties": false
+    },
+    "promptEvent": {
+      "type": "object",
+      "required": ["event", "phase", "review_unit_id", "direction_hash", "diff_fingerprint", "reviewer", "round", "session_id", "prompt_path", "prompt_hash"],
+      "properties": {
+        "event": { "const": "review_prompt" },
+        "phase": { "enum": ["plan", "code"] },
+        "review_unit_id": { "type": "string", "format": "uuid" },
+        "direction_hash": { "$ref": "#/$defs/sha256" },
+        "diff_fingerprint": { "$ref": "#/$defs/sha256" },
+        "reviewer": { "type": "string", "minLength": 1 },
+        "round": { "type": "integer", "minimum": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "prompt_path": { "type": "string", "minLength": 1 },
+        "prompt_hash": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "resultEvent": {
+      "type": "object",
+      "required": ["event", "phase", "review_unit_id", "direction_hash", "diff_fingerprint", "reviewer", "round", "session_id", "prompt_hash", "result_path", "result_hash", "verdict", "must_fix", "should_fix", "nit", "readonly_violations"],
+      "properties": {
+        "event": { "const": "review_result" },
+        "phase": { "enum": ["plan", "code"] },
+        "review_unit_id": { "type": "string", "format": "uuid" },
+        "direction_hash": { "$ref": "#/$defs/sha256" },
+        "diff_fingerprint": { "$ref": "#/$defs/sha256" },
+        "reviewer": { "type": "string", "minLength": 1 },
+        "round": { "type": "integer", "minimum": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "prompt_hash": { "$ref": "#/$defs/sha256" },
+        "result_path": { "type": "string", "minLength": 1 },
+        "result_hash": { "$ref": "#/$defs/sha256" },
+        "verdict": { "enum": ["approve", "needs-attention"] },
+        "must_fix": { "$ref": "#/$defs/stringList" },
+        "should_fix": { "$ref": "#/$defs/stringList" },
+        "nit": { "$ref": "#/$defs/stringList" },
+        "readonly_violations": { "$ref": "#/$defs/stringList" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

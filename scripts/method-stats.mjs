@@ -265,8 +265,10 @@ function main() {
   });
   const e2eRows = evidenceRows.filter((row) => row.evidence.e2eMinutes != null && row.evidence.plan.minutes != null && row.evidence.code.minutes != null && row.evidence.e2eMinutes === row.evidence.plan.minutes + row.evidence.code.minutes);
   const approved = (phase) => dogfoodRows.filter((row) => row.evidence[phase].outcomeEligible && row.evidence[phase].outcome === 'approved').length;
-  const smokeRows = rows.filter((row) => row.smoke !== '—' && SMOKE_GRAMMAR.test(row.smoke));
-  const smokeDone = smokeRows.filter((row) => row.smoke === 'PASS' || /^FAIL/.test(row.smoke)).length;
+  const smokeRecordedRows = rows.filter((row) => row.smoke !== '—' && SMOKE_GRAMMAR.test(row.smoke));
+  const smokeDone = smokeRecordedRows.filter((row) => row.smoke === 'PASS' || /^FAIL/.test(row.smoke)).length;
+  const smokeMissing = rows.filter((row) => row.smoke === '—').length;
+  const smokeInvalid = rows.length - smokeRecordedRows.length - smokeMissing;
   const { count: qualityMissCount, exists: frictionExists } = countQualityMisses();
   console.log('\n集計:');
   console.log(`- 実測フッター件数: ${rows.length}`);
@@ -281,7 +283,8 @@ function main() {
   console.log(`- R1 4分類合計（plan-escape / implementation-deviation / evidence-gap / new-risk）: ${[0, 1, 2, 3].map((index) => sum(classifiedRows.map((row) => row.evidence.classification[index]))).join(' / ')}`);
   console.log(`- 並列Ask件数（旧形式）: ${parallelRows.length}`);
   console.log(`- 並列Ask平均レビュー分（旧形式）: ${average(parallelRows.map((row) => row.parallel.reviewMinutes))}`);
-  console.log(`- smoke実施率: ${ratio(smokeDone, smokeRows.length)}`);
+  console.log(`- smoke実施率: ${ratio(smokeDone, rows.length)}`);
+  console.log(`- smoke記録不備: 未記載${smokeMissing}件 / 文法外${smokeInvalid}件`);
   console.log(frictionExists ? `- friction.md 品質漏れエントリ件数: ${qualityMissCount}` : '- friction.md が見つかりませんでした（0件として扱う）');
 }
 

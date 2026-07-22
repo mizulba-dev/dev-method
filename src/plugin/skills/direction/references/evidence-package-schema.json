@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://mizulba.dev/dev-method/evidence-package-v1.schema.json",
+  "$id": "https://mizulba.dev/dev-method/evidence-package-v2.schema.json",
   "title": "dev-method Evidence Package boundary manifest",
   "type": "object",
   "required": [
@@ -11,7 +11,7 @@
     "contracts"
   ],
   "properties": {
-    "format_version": { "const": 1 },
+    "format_version": { "const": 2 },
     "review_unit_id": { "type": "string", "format": "uuid" },
     "direction": {
       "type": "object",

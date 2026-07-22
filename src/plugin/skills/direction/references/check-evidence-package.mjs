@@ -21,10 +21,11 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 
-const FORMAT_VERSION = 1;
+const FORMAT_VERSION = 2;
 const SOURCE_CHECKER = fileURLToPath(import.meta.url);
 const SOURCE_DIR = dirname(SOURCE_CHECKER);
 const SOURCE_SCHEMA = join(SOURCE_DIR, 'evidence-package-schema.json');
+const SOURCE_LEDGER_SCHEMA = join(SOURCE_DIR, 'review-ledger-schema.json');
 const SOURCE_FINGERPRINT = resolve(SOURCE_DIR, '../../cross-review/references/review-diff-fingerprint.mjs');
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA_RE = /^[0-9a-f]{64}$/;
@@ -138,7 +139,9 @@ function reviewPaths(reviewDir) {
     manifest: join(toolingDir, 'tooling-manifest.json'),
     checker: join(toolingDir, 'check-evidence-package.mjs'),
     schema: join(toolingDir, 'evidence-package-schema.json'),
+    ledger_schema: join(toolingDir, 'review-ledger-schema.json'),
     fingerprint: join(toolingDir, 'review-diff-fingerprint.mjs'),
+    complete: join(reviewDir, 'review-unit-complete.json'),
     revoked: join(reviewDir, 'revoked.json'),
     forcedRegistry: join(parent, '.review-revocations'),
     abandonmentRegistry: join(parent, '.review-abandonments'),
@@ -307,7 +310,7 @@ function validateTooling(reviewDir, { requireCurrentChecker = false } = {}) {
       fail('review_unit_id_mismatch', 'bootstrapイベントとtooling manifestの固定ヘッダーが一致しません');
     }
   }
-  for (const key of ['checker', 'schema', 'fingerprint']) {
+  for (const key of ['checker', 'schema', 'ledger_schema', 'fingerprint']) {
     const entry = manifest.files?.[key];
     const expectedPath = paths[key];
     if (!entry || entry.path !== expectedPath || !SHA_RE.test(entry.sha256)) {
@@ -380,12 +383,13 @@ function bootstrap(reviewDir, options) {
   if (existsSync(paths.toolingDir) && readdirSync(paths.toolingDir).length > 0) {
     fail('existing_tooling_inconsistent', 'manifestのない既存toolingを上書きしません');
   }
-  for (const source of [SOURCE_CHECKER, SOURCE_SCHEMA, SOURCE_FINGERPRINT]) {
+  for (const source of [SOURCE_CHECKER, SOURCE_SCHEMA, SOURCE_LEDGER_SCHEMA, SOURCE_FINGERPRINT]) {
     if (!existsSync(source)) fail('bootstrap_source_missing', `同梱sourceがありません: ${source}`);
   }
   mkdirSync(paths.toolingDir, { recursive: true });
   copyFileSync(SOURCE_CHECKER, paths.checker);
   copyFileSync(SOURCE_SCHEMA, paths.schema);
+  copyFileSync(SOURCE_LEDGER_SCHEMA, paths.ledger_schema);
   copyFileSync(SOURCE_FINGERPRINT, paths.fingerprint);
   chmodSync(paths.checker, 0o755);
   chmodSync(paths.fingerprint, 0o755);
@@ -396,6 +400,7 @@ function bootstrap(reviewDir, options) {
     files: {
       checker: toolingFile(paths.checker),
       schema: toolingFile(paths.schema),
+      ledger_schema: toolingFile(paths.ledger_schema),
       fingerprint: toolingFile(paths.fingerprint),
     },
   };
@@ -405,6 +410,17 @@ function bootstrap(reviewDir, options) {
     review_unit_id: manifest.review_unit_id, tooling_manifest: paths.manifest,
   }, true);
   process.stdout.write(`${JSON.stringify({ ok: true, unchanged: false, review_unit_id: manifest.review_unit_id, tooling_manifest: paths.manifest })}\n`);
+}
+
+function canonicalDirectionBody(body) {
+  const lines = body.split('\n');
+  const lifecycle = lines.filter((line) => /^(?:状態|実測):/.test(line));
+  const stateCount = lifecycle.filter((line) => line.startsWith('状態:')).length;
+  const measurementCount = lifecycle.filter((line) => line.startsWith('実測:')).length;
+  if (stateCount > 1 || measurementCount > 1) {
+    fail('direction_lifecycle_metadata_duplicate', '状態または実測メタデータが重複しています');
+  }
+  return lines.filter((line) => !/^(?:状態|実測):/.test(line)).join('\n');
 }
 
 function parseDirection(path) {
@@ -452,7 +468,11 @@ function parseDirection(path) {
       }
     }
   }
-  return { body, contracts: contracts.map(({ source_index, ...contract }) => contract), sha256: sha256Buffer(body) };
+  return {
+    body,
+    contracts: contracts.map(({ source_index, ...contract }) => contract),
+    sha256: sha256Buffer(canonicalDirectionBody(body)),
+  };
 }
 
 function directionMode(reviewDir, directionPath) {
@@ -931,6 +951,13 @@ function verifyMode(reviewDir, directionPath, manifestPaths) {
       if (contract.evidence_type === 'automated' && (contract.records?.length ?? 0) === 0) {
         fail('automated_evidence_missing', `${contract.id}: record証拠がありません`);
       }
+      if (contract.evidence_type === 'automated') {
+        const baseline = contract.records.some((record) => !record.mutation && record.expected_exit_code === 0);
+        const mutation = contract.records.some((record) => typeof record.mutation === 'string'
+          && record.mutation.length > 0 && record.expected_exit_code !== 0);
+        if (!baseline) fail('automated_baseline_missing', `${contract.id}: exit 0のbaseline recordがありません`);
+        if (!mutation) fail('automated_mutation_missing', `${contract.id}: 非ゼロ終了を期待する故意ずれrecordがありません`);
+      }
       for (const record of contract.records ?? []) {
         if (!existsSync(record.log_path) || sha256File(record.log_path) !== record.log_sha256) {
           fail('record_log_tampered', `${contract.id}: recordログが改変されています`);
@@ -986,6 +1013,15 @@ function validateLedgerEvent(event, tooling, phase) {
   if (!SHA_RE.test(event.direction_hash)) fail('ledger_direction_hash_mismatch', 'イベントのdirection hashが不正です');
   if (event.phase !== phase) fail('ledger_phase_mismatch', '別phaseのイベントが混在しています');
   if (event.diff_fingerprint && !SHA_RE.test(event.diff_fingerprint)) fail('ledger_diff_fingerprint_invalid', 'diff指紋が不正です');
+  if (event.event === 'review_prompt' || event.event === 'review_result') {
+    const schema = readJson(tooling.files.ledger_schema.path, 'ledger_schema_invalid');
+    const definition = event.event === 'review_prompt' ? schema.$defs.promptEvent : schema.$defs.resultEvent;
+    const errors = schemaMatches(event, definition, schema);
+    if (errors.length) fail(event.event === 'review_prompt' ? 'ledger_prompt_invalid' : 'ledger_result_invalid', 'reviewイベントが固定schemaに適合しません', errors);
+  }
+  if (event.event === 'review_ledger_check' && (!Number.isInteger(event.round) || event.round < 1)) {
+    fail('ledger_checkpoint_round_invalid', 'review-ledger実行イベントにroundがありません');
+  }
 }
 
 function appendJsonLineAtomic(path, value) {
@@ -996,6 +1032,91 @@ function appendJsonLineAtomic(path, value) {
   renameSync(temp, path);
 }
 
+function readLedgerEvents(eventsPath) {
+  if (!existsSync(eventsPath)) return [];
+  return readFileSync(eventsPath, 'utf8').split('\n').filter(Boolean).map((line, index) => {
+    try { return JSON.parse(line); } catch { fail('ledger_json_invalid', `イベント${index + 1}がJSONではありません`); }
+  });
+}
+
+function positiveRound(options) {
+  const round = Number(option(options, 'round', true));
+  if (!Number.isInteger(round) || round < 1) fail('usage', '--roundは1以上の整数です');
+  return round;
+}
+
+function ledgerPromptMode(reviewDir, directionPath, options) {
+  const tooling = validateTooling(reviewDir, { requireCurrentChecker: true });
+  const phase = option(options, 'phase', true);
+  if (!['plan', 'code'].includes(phase)) fail('usage', '--phaseはplanまたはcodeです');
+  const eventsPath = requireAbsolute(option(options, 'events', true), '--events');
+  const promptPath = requireAbsolute(option(options, 'prompt', true), '--prompt');
+  if (!existsSync(promptPath)) fail('ledger_prompt_invalid', `promptファイルがありません: ${promptPath}`);
+  const reviewer = option(options, 'reviewer', true);
+  const round = positiveRound(options);
+  const sessionId = option(options, 'session-id', true);
+  const events = readLedgerEvents(eventsPath);
+  if (events.some((event) => event.event === 'review_prompt' && event.phase === phase
+    && event.reviewer === reviewer && event.round === round)) {
+    fail('ledger_prompt_duplicate', `${phase}/${reviewer}/R${round}のpromptイベントは作成済みです`);
+  }
+  const parsed = parseDirection(directionPath);
+  const root = gitRoot();
+  const event = {
+    event: 'review_prompt', phase, review_unit_id: tooling.review_unit_id,
+    direction_hash: parsed.sha256, diff_fingerprint: fingerprint(root, reviewDir, tooling),
+    reviewer, round, session_id: sessionId, prompt_path: promptPath, prompt_hash: sha256File(promptPath),
+  };
+  const schema = readJson(tooling.files.ledger_schema.path, 'ledger_schema_invalid');
+  const errors = schemaMatches(event, schema.$defs.promptEvent, schema);
+  if (errors.length) fail('ledger_prompt_invalid', 'promptイベントが固定schemaに適合しません', errors);
+  appendJsonLineAtomic(eventsPath, event);
+  process.stdout.write(`${JSON.stringify({ ok: true, ...event })}\n`);
+}
+
+function ledgerResultMode(reviewDir, directionPath, options) {
+  const tooling = validateTooling(reviewDir, { requireCurrentChecker: true });
+  const phase = option(options, 'phase', true);
+  if (!['plan', 'code'].includes(phase)) fail('usage', '--phaseはplanまたはcodeです');
+  const eventsPath = requireAbsolute(option(options, 'events', true), '--events');
+  const resultPath = requireAbsolute(option(options, 'result', true), '--result');
+  if (!existsSync(resultPath)) fail('ledger_result_invalid', `resultファイルがありません: ${resultPath}`);
+  const reviewer = option(options, 'reviewer', true);
+  const round = positiveRound(options);
+  const sessionId = option(options, 'session-id', true);
+  const events = readLedgerEvents(eventsPath);
+  const prompts = events.filter((event) => event.event === 'review_prompt' && event.phase === phase
+    && event.reviewer === reviewer && event.round === round && event.session_id === sessionId);
+  if (prompts.length !== 1) fail('ledger_prompt_invalid', `${phase}/${reviewer}/R${round}の対応promptが一意ではありません`);
+  if (events.some((event) => event.event === 'review_result' && event.phase === phase
+    && event.reviewer === reviewer && event.round === round)) {
+    fail('ledger_result_duplicate', `${phase}/${reviewer}/R${round}のresultイベントは作成済みです`);
+  }
+  const result = readJson(resultPath, 'ledger_result_invalid');
+  const schema = readJson(tooling.files.ledger_schema.path, 'ledger_schema_invalid');
+  const resultErrors = schemaMatches(result, schema.$defs.resultDocument, schema);
+  if (resultErrors.length) fail('ledger_result_invalid', 'result本文が固定schemaに適合しません', resultErrors);
+  const issueKeys = phase === 'plan' ? ['must_fix', 'should_fix', 'nit'] : ['must_fix', 'should_fix'];
+  const issueCount = issueKeys.reduce((sum, key) => sum + result[key].length, 0);
+  if ((result.verdict === 'approve' && issueCount !== 0)
+    || (result.verdict === 'needs-attention' && issueCount === 0)) {
+    fail('ledger_verdict_inconsistent', 'result本文のverdictと指摘件数が不整合です');
+  }
+  const prompt = prompts[0];
+  const event = {
+    event: 'review_result', phase, review_unit_id: tooling.review_unit_id,
+    direction_hash: prompt.direction_hash, diff_fingerprint: prompt.diff_fingerprint,
+    reviewer, round, session_id: sessionId, prompt_hash: prompt.prompt_hash,
+    result_path: resultPath, result_hash: sha256File(resultPath),
+    verdict: result.verdict, must_fix: result.must_fix, should_fix: result.should_fix,
+    nit: result.nit, readonly_violations: result.readonly_violations,
+  };
+  const eventErrors = schemaMatches(event, schema.$defs.resultEvent, schema);
+  if (eventErrors.length) fail('ledger_result_invalid', 'resultイベントが固定schemaに適合しません', eventErrors);
+  appendJsonLineAtomic(eventsPath, event);
+  process.stdout.write(`${JSON.stringify({ ok: true, ...event })}\n`);
+}
+
 function reviewLedger(reviewDir, directionPath, options) {
   const tooling = validateTooling(reviewDir, { requireCurrentChecker: true });
   const phase = option(options, 'phase', true);
@@ -1004,27 +1125,37 @@ function reviewLedger(reviewDir, directionPath, options) {
   const allowedPoints = phase === 'plan' ? ['results-received', 'before-agreement'] : ['results-received', 'before-completion'];
   if (!allowedPoints.includes(point)) fail('usage', `${phase} phaseでは--execution-point ${point}を使えません`);
   const eventsPath = requireAbsolute(option(options, 'events', true), '--events');
+  const checkpointRound = positiveRound(options);
   if (basename(reviewDir) !== basename(directionPath).replace(/\.md$/, '')) fail('review_dir_direction_mismatch', 'review-dirとdirection basenameが一致しません');
-  const directionHash = sha256File(directionPath);
+  const directionHash = parseDirection(directionPath).sha256;
   const root = gitRoot();
   const currentFingerprint = fingerprint(root, reviewDir, tooling);
   const invocationId = randomUUID();
+  const priorEvents = readLedgerEvents(eventsPath);
+  const priorResultRounds = priorEvents.filter((event) => event.event === 'review_result' && event.phase === phase)
+    .map(({ round }) => round);
+  if (priorResultRounds.length === 0 || Math.max(...priorResultRounds) !== checkpointRound) {
+    fail('ledger_checkpoint_round_mismatch', 'checkpoint roundが最新result roundと一致しません');
+  }
   appendJsonLineAtomic(eventsPath, {
     event: 'review_ledger_check', phase, execution_point: point,
-    invocation_id: invocationId,
+    invocation_id: invocationId, round: checkpointRound,
     review_unit_id: tooling.review_unit_id, direction_hash: directionHash,
     diff_fingerprint: currentFingerprint, checked_at: new Date().toISOString(),
   });
-  const events = readFileSync(eventsPath, 'utf8').split('\n').filter(Boolean).map((line, index) => {
-    try { return JSON.parse(line); } catch { fail('ledger_json_invalid', `イベント${index + 1}がJSONではありません`); }
-  });
+  try {
+  const events = readLedgerEvents(eventsPath);
   for (const event of events) validateLedgerEvent(event, tooling, phase);
   const checks = events.filter(({ event }) => event === 'review_ledger_check');
+  const passedCheckIds = new Set(events.filter(({ event }) => event === 'review_ledger_check_passed')
+    .map(({ invocation_id }) => invocation_id));
   if (checks.some((event) => !UUID_RE.test(event.invocation_id))
     || new Set(checks.map(({ invocation_id }) => invocation_id)).size !== checks.length) {
     fail('ledger_invocation_invalid', 'review-ledger自己イベントのinvocation_idが欠落または重複しています');
   }
-  if (point !== 'results-received' && !events.some((event) => event.event === 'review_ledger_check' && event.execution_point === 'results-received')) {
+  if (point !== 'results-received' && !events.some((event) => event.event === 'review_ledger_check'
+    && event.execution_point === 'results-received' && event.round === checkpointRound
+    && passedCheckIds.has(event.invocation_id))) {
     fail('ledger_checkpoint_missing', 'results-receivedのreview-ledger実行イベントがありません');
   }
   const prompts = events.filter(({ event }) => event === 'review_prompt');
@@ -1041,12 +1172,21 @@ function reviewLedger(reviewDir, directionPath, options) {
       || !existsSync(result.result_path) || sha256File(result.result_path) !== result.result_hash) {
       fail('ledger_result_invalid', 'resultイベントの必須欄/hashが不正です');
     }
+    const resultDocument = readJson(result.result_path, 'ledger_result_invalid');
+    const schema = readJson(tooling.files.ledger_schema.path, 'ledger_schema_invalid');
+    const resultErrors = schemaMatches(resultDocument, schema.$defs.resultDocument, schema);
+    if (resultErrors.length || resultDocument.verdict !== result.verdict
+      || !sameJson(resultDocument.must_fix, result.must_fix)
+      || !sameJson(resultDocument.should_fix, result.should_fix)
+      || !sameJson(resultDocument.nit, result.nit)
+      || !sameJson(resultDocument.readonly_violations, result.readonly_violations)) {
+      fail('ledger_result_content_mismatch', 'result本文とresultイベントの意味内容が一致しません', resultErrors);
+    }
     const categories = ['must_fix', 'should_fix', 'nit'];
     if (!categories.every((key) => Array.isArray(result[key])) || !Array.isArray(result.readonly_violations)) fail('ledger_result_invalid', '3区分とread-only監査の配列が必要です');
     const issueCount = (phase === 'plan' ? categories : ['must_fix', 'should_fix'])
       .reduce((sum, key) => sum + result[key].length, 0);
-    const missingCodeVerdict = phase === 'code' && result.verdict === undefined;
-    if ((!missingCodeVerdict && !['approve', 'needs-attention'].includes(result.verdict))
+    if (!['approve', 'needs-attention'].includes(result.verdict)
       || (result.verdict === 'approve' && issueCount !== 0)
       || (result.verdict === 'needs-attention' && issueCount === 0)) {
       fail('ledger_verdict_inconsistent', 'verdictとmust-fix/should-fix/nitが不整合です');
@@ -1074,17 +1214,15 @@ function reviewLedger(reviewDir, directionPath, options) {
     }
   }
   const latestRound = Math.max(...results.map(({ round }) => round));
+  if (checkpointRound !== latestRound) fail('ledger_checkpoint_round_mismatch', 'checkpoint roundが最新roundではありません');
   const latest = results.filter(({ round }) => round === latestRound);
   if (new Set(latest.map(({ reviewer }) => reviewer)).size !== reviewers.length) fail('ledger_result_missing', '最新ラウンドのreviewer結果が欠落しています');
   const latestFingerprints = new Set(latest.map(({ diff_fingerprint }) => diff_fingerprint));
   if (latestFingerprints.size !== 1) fail('ledger_round_mismatch', '最新ラウンドの承認対象指紋が不一致です');
-  const latestActionable = latest.reduce((sum, result) => sum + result.must_fix.length + result.should_fix.length, 0);
-  const latestVerdictMissing = phase === 'code' && latest.some(({ verdict }) => verdict === undefined);
   const rounds = [...new Set(results.map(({ round }) => round))];
   const reworkCount = rounds.filter((round) => results.filter((result) => result.round === round)
     .some((result) => result.must_fix.length + result.should_fix.length > 0)).length;
   const latestUnresolved = latest.some(({ verdict }) => verdict === 'needs-attention')
-    || latestVerdictMissing
     || (phase === 'plan' && latest.some(({ direction_hash }) => direction_hash !== directionHash))
     || (phase === 'code' && [...latestFingerprints][0] !== currentFingerprint);
   const latestStaleDiagnostic = phase === 'plan' && latest.some(({ direction_hash }) => direction_hash !== directionHash)
@@ -1107,11 +1245,8 @@ function reviewLedger(reviewDir, directionPath, options) {
     }
     throw new DiagnosticError('review_backstop_reached', '差し戻しバックストップに到達したため、未解決指摘を添えて停止してください', 3, reworkState);
   }
-  if (latest.some(({ verdict }) => verdict === 'needs-attention') || (latestVerdictMissing && latestActionable > 0)) {
+  if (latest.some(({ verdict }) => verdict === 'needs-attention')) {
     throw new DiagnosticError('review_attention_required', '指摘を反映して次ラウンドへ進んでください', 2, reworkState);
-  }
-  if (latestVerdictMissing) {
-    throw new DiagnosticError('verdict_missing', '指摘ゼロですがreviewer結果のverdictが欠落しているため再レビューが必要です', 2, reworkState);
   }
   if (phase === 'plan' && latest.some(({ direction_hash }) => direction_hash !== directionHash)) {
     appendJsonLineAtomic(eventsPath, {
@@ -1137,11 +1272,17 @@ function reviewLedger(reviewDir, directionPath, options) {
   if (point === finalPoint) {
     const staleCount = events.filter((event) => event.event === 'review_ledger_stale').length;
     const roundCount = new Set(results.map(({ round }) => round)).size;
-    const observedResults = checks.filter(({ execution_point }) => execution_point === 'results-received').length;
-    const observedFinal = checks.filter(({ execution_point }) => execution_point === finalPoint).length;
+    const successfulChecks = checks.filter(({ invocation_id }) => passedCheckIds.has(invocation_id)
+      || invocation_id === invocationId);
+    const resultChecks = successfulChecks.filter(({ execution_point }) => execution_point === 'results-received');
+    const observedResults = resultChecks.length;
+    const observedFinal = successfulChecks.filter(({ execution_point }) => execution_point === finalPoint).length;
     const expectedResults = roundCount;
     const expectedFinal = staleCount + 1;
-    if (observedResults !== expectedResults || observedFinal !== expectedFinal) {
+    const resultRounds = [...new Set(results.map(({ round }) => round))].sort((a, b) => a - b);
+    const checkpointRounds = resultChecks.map(({ round }) => round).sort((a, b) => a - b);
+    if (observedResults !== expectedResults || observedFinal !== expectedFinal
+      || !sameJson(checkpointRounds, resultRounds)) {
       fail('ledger_checkpoint_count_mismatch', 'review-ledger実行点の観測数と期待数が一致しません', {
         observed_results: observedResults, expected_results: expectedResults, observed_final: observedFinal, expected_final: expectedFinal, stale: staleCount,
       });
@@ -1150,8 +1291,36 @@ function reviewLedger(reviewDir, directionPath, options) {
     const resultLabel = phase === 'plan' ? '結果受領' : '両結果受領';
     const finalLabel = phase === 'plan' ? '合意直前' : '完了直前';
     eligibilityToken = `${label} ${resultLabel}${observedResults}/${expectedResults}・${finalLabel}${observedFinal}/${expectedFinal}・stale${staleCount}・eligible=true`;
+    if (phase === 'code') {
+      atomicWriteJson(reviewPaths(reviewDir).complete, {
+        format_version: FORMAT_VERSION,
+        review_unit_id: tooling.review_unit_id,
+        direction_hash: directionHash,
+        diff_fingerprint: currentFingerprint,
+        invocation_id: invocationId,
+        completed_at: new Date().toISOString(),
+      }, true);
+    }
   }
+  appendJsonLineAtomic(eventsPath, {
+    event: 'review_ledger_check_passed', phase, execution_point: point,
+    invocation_id: invocationId, round: checkpointRound,
+    review_unit_id: tooling.review_unit_id, direction_hash: directionHash,
+    diff_fingerprint: currentFingerprint, checked_at: new Date().toISOString(),
+  });
   process.stdout.write(`${JSON.stringify({ ok: true, phase, execution_point: point, invocation_id: invocationId, review_unit_id: tooling.review_unit_id, direction_hash: directionHash, diff_fingerprint: currentFingerprint, round: latestRound, ...reworkState, ...(eligibilityToken ? { eligibility_token: eligibilityToken } : {}) })}\n`);
+  } catch (error) {
+    appendJsonLineAtomic(eventsPath, {
+      event: error instanceof DiagnosticError && error.exitCode !== 1
+        ? 'review_ledger_check_passed' : 'review_ledger_check_failed',
+      phase, execution_point: point,
+      invocation_id: invocationId, round: checkpointRound,
+      review_unit_id: tooling.review_unit_id, direction_hash: directionHash,
+      diff_fingerprint: currentFingerprint, checked_at: new Date().toISOString(),
+      diagnostic: error instanceof DiagnosticError ? error.diagnostic : 'unexpected_error',
+    });
+    throw error;
+  }
 }
 
 function revoke(reviewDir, supersededBy) {
@@ -1244,8 +1413,14 @@ function main() {
   } else if (mode === 'verify') {
     assertKnownOptions(options, ['review-dir', 'direction', 'manifest']);
     verifyMode(reviewDir, requireAbsolute(option(options, 'direction', true), '--direction'), optionsList(options, 'manifest'));
+  } else if (mode === 'ledger-prompt') {
+    assertKnownOptions(options, ['review-dir', 'direction', 'phase', 'events', 'reviewer', 'round', 'session-id', 'prompt']);
+    ledgerPromptMode(reviewDir, requireAbsolute(option(options, 'direction', true), '--direction'), options);
+  } else if (mode === 'ledger-result') {
+    assertKnownOptions(options, ['review-dir', 'direction', 'phase', 'events', 'reviewer', 'round', 'session-id', 'result']);
+    ledgerResultMode(reviewDir, requireAbsolute(option(options, 'direction', true), '--direction'), options);
   } else if (mode === 'review-ledger') {
-    assertKnownOptions(options, ['review-dir', 'direction', 'phase', 'events', 'execution-point']);
+    assertKnownOptions(options, ['review-dir', 'direction', 'phase', 'events', 'execution-point', 'round']);
     reviewLedger(reviewDir, requireAbsolute(option(options, 'direction', true), '--direction'), options);
   } else {
     fail('usage', `未知のモードです: ${mode}`);
