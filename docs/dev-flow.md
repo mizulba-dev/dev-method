@@ -83,6 +83,12 @@ flowchart TD
     S4 --> S5["出荷 ＋ 実測フッター1行"]
     S3 -.->|"should-fix / nit"| S6["蓄積 → follow-up 1バッチ"]
   end
+  classDef show fill:#DEE7F5,stroke:#35558A,color:#1C2E4E
+  class S1,S2,S2b,S2c,S3,S4,S5,S6 show
+```
+
+```mermaid
+flowchart TD
   subgraph SIGNLANE ["Sign（高リスク・検知器）"]
     G1["実装"] --> G2["機械ゲート<br/>検知器タスクは実データ・実ログ<br/>× 不変式のハーネス"]
     G2 --> G3["同一 diff 指紋へ並列起動"]
@@ -93,9 +99,7 @@ flowchart TD
     G6 --> G7["must-fix を1バッチ修正"]
     G7 --> G8["機械ゲート green → 出荷<br/>（再レビューなし）"]
   end
-  classDef show fill:#DEE7F5,stroke:#35558A,color:#1C2E4E
   classDef sign fill:#F5EAD2,stroke:#A9761C,color:#4E3608
-  class S1,S2,S2b,S2c,S3,S4,S5,S6 show
   class G1,G2,G3,G4,G5,G6,G7,G8 sign
 ```
 
