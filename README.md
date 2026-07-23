@@ -8,7 +8,7 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
@@ -26,6 +26,7 @@ Seal の Evidence Package は、direction で明示した既知契約と、そ�
 - `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。固定スクリプト `references/session-metrics.mjs` で時間内訳を決定論的に集計する。direction を書いた作業の完了記載時は必須実行し（レーン非依存。実働欄を実測確定）、それ以外は「時間がかかった」と感じたときの主観トリガーで呼ぶ。スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
 - `scenario-kit` — Playwright 録画を軸にした3用途ツール: ブランド付きデモ動画（`run`）、リリースノート・ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`。ランタイム異常検知＋証跡を残す）。1つのシナリオを3用途へ使い回すのが基本形で、接続先が異なる場合だけ `<name>-local.json` 等の変種に分ける
+- `bug-diagnosis` — 手強いバグ・性能劣化の診断ループ。再現ループ構築（工程1）を本体に、最小化・仮説立案・計装・正しいシームでの回帰テスト・掃除チェックリストまでを規律化する
 
 plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。team-impl は各クライアントに自分用の1つだけが入るため名前衝突しない。
 

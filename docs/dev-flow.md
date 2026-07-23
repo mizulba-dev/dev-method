@@ -153,6 +153,7 @@ flowchart TD
 | `scenario-kit` | 1シナリオを demo 動画 / スクリーンショット / smoke 検証の3用途に使い回す |
 | `plugin-release` | バージョンバンプ → tag push → 配布 → 両 CLI 反映の一気通貫リリース |
 | `friction-revise` | friction ログを精査して手法スキルを1バッチ改訂（dev-method リポジトリ専用） |
+| `bug-diagnosis` | 手強いバグ・性能劣化の診断ループ。再現ループ構築を本体に最小化・仮説・計装・回帰テストへつなぐ |
 | PaPut 連携 | 起草前の過去決定検索・完了時の design_doc 保存で、プロジェクト横断の決定履歴を維持 |
 
 モデル割当（正本は README のモデル割当表）:
