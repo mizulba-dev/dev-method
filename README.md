@@ -8,7 +8,7 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents + `SubagentStop` 報告ゲート hook | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
@@ -96,7 +96,7 @@ Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` 
 
 - Codex 版 team-impl の interrupt_agent 運用、並列スポーンの安定性、agents 定義の反映タイミング
 - Codex 版 reviewer プロファイルの read-only 強制（spawn_agent に sandbox 相当の指定がなく、プロンプト指示のみに依存。2026-07-16 追加）
-- `dev-method-claude` の `hooks/hooks.json` における `$PLUGIN_ROOT` 展開の実機確認（plugin-codex の前例と同形式で実装したが、2026-07-19 時点でローカルにインストール済みのプラグインキャッシュが hooks.json 未搭載の旧バージョンのため未確認。次回リリース・再インストール後に確認する）
+- `dev-method-claude` の SubagentStop 報告ゲート hook のプラグイン経由発火（**2026-07-23 実測で不発を確認**: 0.1.55 キャッシュに hooks.json 搭載済みの環境で、SendMessage 報告なしで終了する `dev-method-claude:reviewer` を spawn したところ、ブロックされず素通りし、subagent transcript にも hook 実行痕跡ゼロ。`$PLUGIN_ROOT` 展開以前に hook 自体が起動していない。2026-07-19 の実機確認は settings.json 直書き probe によるもので、プラグイン配布経路の発火は未達成。原因切り分け（プラグイン hooks の読み込み条件・matcher・クライアント版数）が必要）
 
 ## 検証済み
 

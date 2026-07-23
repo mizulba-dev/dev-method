@@ -14,7 +14,7 @@
 - 観点: 正当性バグ／計画ファイルからの設計逸脱／対象リポジトリの CLAUDE.md・AGENTS.md 規約違反／テスト不足・テストの空通し
 - テスト不足はテストの存在でなく変更した振る舞いを実際に検知するかで判定し、no-throw 確認だけのテスト・実装の出力をなぞるだけのアサーションは不足として扱う
 - 検証証跡: {{EVIDENCE}}（implementer の実行コマンド・exit code・pass/fail 件数。該当なしの場合は「検証証跡なし」と明記する）。テスト不足・空通しは証跡とテストコードの静的照合で判定させる（レビュアーにテストを実行させない。実行検証を求めるのは下記「検知器変更時の検体照合」ブロックの場合のみ）
-- レビュー作業単位: {{REVIEW_CONTEXT}}（Ask 共同レビューでは tooling manifest と全境界manifestの絶対パス・内容 SHA-256、`review_unit_id`、review-required 一覧、direction 本文 SHA-256 を含む。standalone では「standalone のため Ask 作業単位入力なし」と明記する）
+- レビュー作業単位: {{REVIEW_CONTEXT}}（Seal 共同レビューでは tooling manifest と全境界manifestの絶対パス・内容 SHA-256、`review_unit_id`、review-required 一覧、direction 本文 SHA-256 を含む。standalone では「standalone のため Seal 作業単位入力なし」と明記する）
 - Evidence Package は既知の契約と証拠をたどる探索索引であり、レビュー範囲の免責ではない。package 記載の有無にかかわらず diff 全体と必要な周辺コードを読み、direction の契約漏れ、証拠が違反を識別するか、実装が観測点を迂回していないか、変更から未モデル化リスクが生じていないかを確認する
 - must-fix / should-fix は根本原因を `plan-escape` / `implementation-deviation` / `evidence-gap` / `new-risk` のいずれかへ分類し、可能なら Evidence Contract ID に紐付ける。分類不能は `new-risk` とし、分類と契約IDを findings の body 冒頭へ記載する
 - 報告前に各指摘へ4問を課す: 該当行を特定できるか／具体的な失敗シナリオを言えるか／周辺コンテキスト（呼び出し元・既存ガード）を読んだか／その重大度を擁護できるか。1つでも no なら降格または破棄する。指摘ゼロは正当な結果であり、件数を作るための指摘をしない

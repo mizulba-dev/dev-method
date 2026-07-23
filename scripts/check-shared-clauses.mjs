@@ -461,13 +461,13 @@ const CLAUSE_PAIRS = [
     id: 'Evidence: implementer両版のmanifest・record契約',
     fileA: 'src/plugin-claude/agents/implementer.md',
     fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
-    regex: /Evidence Packageを要求されたAskでworktree分離を使わない場合は.*/,
+    regex: /Evidence Packageを要求されたSealでworktree分離を使わない場合は.*/,
   },
   {
     id: 'Evidence: implementer-high両版のmanifest・record契約',
     fileA: 'src/plugin-claude/agents/implementer-high.md',
     fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
-    regex: /Evidence Packageを要求されたAskでworktree分離を使わない場合は.*/,
+    regex: /Evidence Packageを要求されたSealでworktree分離を使わない場合は.*/,
   },
 ];
 

@@ -13,7 +13,7 @@ argument-hint: [セッションID]
 
 体感で原因を決めつけず、`references/session-metrics.mjs` の実測 JSON から時間内訳を出してから問題を特定する。
 
-必須実測の記載先はレーンのフッター型に従う（採用条件は共通＝`skippedLines`・`unknownEvents`・`orphanToolUses` が各1%未満、かつ検算値が非 null なら乖離 ≦10%。検算は Claude が clean turn 窓限定の `turnWindowActiveMs` 対 `turnWindowCheckMs`、Codex が `activeMs` 対 `durationCheckMs`）: **Show** は簡易フッターの実働欄 `実働<N>分（手法運用<N>分）`、**Sign / Seal** は Ask 型文法フッターの実働欄。採用条件を満たさなければどのレーンでも省略（欠測）。
+必須実測の記載先はレーンのフッター型に従う（採用条件は共通＝`skippedLines`・`unknownEvents`・`orphanToolUses` が各1%未満、かつ検算値が非 null なら乖離 ≦10%。検算は Claude が clean turn 窓限定の `turnWindowActiveMs` 対 `turnWindowCheckMs`、Codex が `activeMs` 対 `durationCheckMs`）: **Show** は簡易フッターの実働欄 `実働<N>分（手法運用<N>分）`、**Sign / Seal** は Seal 型フッター（direction 完了節の文法。旧称 Ask 型）の実働欄。採用条件を満たさなければどのレーンでも省略（欠測）。
 
 ## 対象セッションの解決
 
