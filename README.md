@@ -14,7 +14,7 @@
 
 - `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Sign / Seal）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。**レーンは爆発半径だけで判定・宣言し、direction の有無とは独立**（direction は設計合意の道具）: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（デフォルト）はプレレビュー**1回・must のみ**で `cross-review` 省略、Sign（高リスク・検知器の新設/変更）は pre+cross 各1回・統合裁定・must 1バッチ修正・再レビューなし、Seal（**不可逆×外部影響**が重なる変更のみ）は direction フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。追跡済み差分と非 ignore 未追跡を含む SHA-256 指紋を返し、standalone では開始時・返却値・結果受領時の同一性を確認して収束までループする
-- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。Codex は現在の `spawn_agent` schema が対応していれば `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする。schema に `agent_type` が無い未対応 runtime では、セッション開始前から定義が同期済みの場合に限り役割本文を同梱して縮退し、モデル配分不成立（親モデル継承）を記録する。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Sign は pre + cross を各1回だけ起動し、統合裁定して must-fix を1バッチ修正して出荷する（再レビューなし・Evidence/ledger なし）。Show のプレレビュー1回・must のみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
+- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。Codex は `spawn_agent` の `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする（`agent_type` field が無い runtime では縮退せず停止して Codex の更新・完全再起動を求める。2026-07-23 に役割本文同梱の縮退経路を撤去）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Sign は pre + cross を各1回だけ起動し、統合裁定して must-fix を1バッチ修正して出荷する（再レビューなし・Evidence/ledger なし）。Show のプレレビュー1回・must のみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
 
 ### Evidence Package
 
@@ -75,14 +75,14 @@ codex plugin add dev-method-codex@mizulba-dev
 実装・修正の依頼を受けたら、着手前にレーンを1行宣言してから作業する（判定の正本は dev-method の `direction` スキル）。**レーンは爆発半径だけで決め、direction の有無とは独立**（direction は設計合意の道具であり、書いても実装工程は重くならない）。**Show は原義（マージ後の事後レビュー）でなく「出荷前の1回レビュー」を指す**:
 
 - **Ship**（挙動に触れない: typo・docs・コメント・ログ文言・依存 patch 更新・自明な設定値変更）: 直接実装し、機械ゲート（lint・build・該当テスト）のみ。レビューなし
-- **Show（デフォルト）**（下位2レーンの基準に触れないすべて）: 直接実装 → 機械ゲート → プレレビュー**1回**（**must-fix のみ即対応**、should-fix / nit は蓄積して follow-up 1バッチ）。Codex は現在の `spawn_agent` schema に `agent_type` があり `reviewer` が利用可能 role に見えれば `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` が無い環境では3 role 定義がセッション開始前から同期済みの場合に限り reviewer TOML の役割本文を同梱し、モデル配分不成立（親モデル継承）を記録する。role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更ではリポジトリroot・worktree root・モノレポ配下を探索し、既存シナリオの有無にかかわらず既存・軽微な変種または最小scenarioを準備して `scenario-kit smoke` を実走する。実測は `smoke <PASS|FAIL n件|評価不能|対象外>` とし、UI変更では `未整備` を使わない（UI非変更は `対象外`）
+- **Show（デフォルト）**（下位2レーンの基準に触れないすべて）: 直接実装 → 機械ゲート → プレレビュー**1回**（**must-fix のみ即対応**、should-fix / nit は蓄積して follow-up 1バッチ）。Codex は `spawn_agent` の `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` field が無い・role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更ではリポジトリroot・worktree root・モノレポ配下を探索し、既存シナリオの有無にかかわらず既存・軽微な変種または最小scenarioを準備して `scenario-kit smoke` を実走する。実測は `smoke <PASS|FAIL n件|評価不能|対象外>` とし、UI変更では `未整備` を使わない（UI非変更は `対象外`）
 - **Sign**（高リスク基準*に触れる、または検知器の新設・変更）: 実装 → 機械ゲート（検知器タスクは実データ・実ログ×不変式のハーネスをここに）→ pre + cross を各1回 → 統合裁定 → must-fix を1バッチ修正 → 機械ゲート green で出荷（**修正後の再レビューなし**）。cross のログ機械判定と故意ずれ検体の実行検証は維持。Evidence Package・ledger・収束ループは使わない
 - **Seal**（**不可逆**＝復旧不能なデータ変更・削除・公開後取り消し不能 ×**外部影響**＝公開 API・課金・第三者データ が**重なる**変更のみ）: `direction` を起草しフルパイプ（合意前計画レビュー・二者承認までの収束・Evidence Package・ledger）
 - *高リスク基準 = DB migration・並行処理・認可・セキュリティ・境界間契約
 - 迷ったら重い側のレーンに倒す。ユーザーがレーンを明示指定したら判定を省略する
 ```
 
-Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` agent の spawn、Codex では現在の tool schema が対応していれば `agent_type="reviewer"`・`fork_turns="none"` の spawn_agent で行う。schema に `agent_type` が無い場合の事前同期済み定義に限る縮退、role 不可視・適用失敗時の fail-closed は team-impl の前提セットアップと同じ契約に従う。
+Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` agent の spawn、Codex では `agent_type="reviewer"`・`fork_turns="none"` の spawn_agent で行う。`agent_type` field 欠落・role 不可視・適用失敗時の fail-closed は team-impl の前提セットアップと同じ契約に従う。
 
 ## リリース手順
 
@@ -104,6 +104,7 @@ Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` 
 - Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐。2026-07-09 初回運用で実測、オプション形式の調整後に動作）
 - Codex 版 team-impl の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
 - Codex 版 team-impl の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
+- `agent_type` 前提化（2026-07-23）: ユーザー環境の Codex で `spawn_agent` schema に `agent_type` が常在することを確認し、未対応 runtime 向けの役割本文同梱縮退（モデル配分不成立の記録つき）をスキル・README から撤去した。`agent_type` field 自体が無い場合は縮退せず停止する fail-closed へ変更
 - Codex CLI `0.145.0-alpha.24` の custom role routing（2026-07-20実測）: `agent_type` + `fork_turns="none"` で implementer = GPT-5.6 Terra/medium、implementer-high = GPT-5.6 Sol/high、reviewer = GPT-5.6 Sol/high を選択し、implementer の follow-up でも同じ role / model / effort を維持。これは CLI alpha の確認であり、Codex Desktop / IDE の現セッションへの反映は現在の tool schema で別途判定する
 - Codex セッション JSONL の cwd・正常/中断ターン境界・ツール call/output・MCP 所要時間・累積トークン量の抽出（2026-07-11 実在ログで確認）
 - Claude Code の `SubagentStop` hook 入力 JSON のフィールド実名（2026-07-19 probe hook で実測）: `transcript_path` は**親セッション側**の transcript で、サブエージェント自身の transcript は別フィールド `agent_transcript_path`。再入フラグの実名は `stop_hook_active`。他に `agent_id` / `agent_type` / `session_id` / `cwd` / `hook_event_name` / `last_assistant_message` / `background_tasks` / `session_crons` を確認。実機確認として、SendMessage を使わず終了しようとする subagent が報告ゲート hook にブロックされ、Stop hook feedback を受けて SendMessage 送信後に終了するフローを実測

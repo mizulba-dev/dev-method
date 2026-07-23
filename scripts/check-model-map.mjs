@@ -233,27 +233,19 @@ const PROSE_CHECKS = [
 const ROUTING_CHECKS = [
   {
     description: 'implementer role が agent_type へ伝播する',
-    regex: /対応 runtime では通常境界に `agent_type="implementer"`/,
+    regex: /通常境界に `agent_type="implementer"`/,
   },
   {
     description: 'implementer-high role が agent_type へ伝播する',
-    regex: /高リスク境界に `agent_type="implementer-high"` を渡す/,
+    regex: /高リスク境界に `agent_type="implementer-high"` を渡/,
   },
   {
     description: 'reviewer role が agent_type で選択される',
-    regex: /対応 runtime では `agent_type="reviewer"`・`fork_turns="none"` を指定/,
+    regex: /`agent_type="reviewer"`・`fork_turns="none"` を指定/,
   },
   {
     description: '実装 role 指定時に fork_turns=none を使う',
-    regex: /どちらの runtime でも `fork_turns="none"` を指定する/,
-  },
-  {
-    description: 'agent_type 非対応時は実装 role 本文を同梱して起動する',
-    regex: /`agent_type` field が無い事前同期済み runtime では、`agent_type` を渡さず選択 role TOML の `developer_instructions` を message 冒頭へ同梱する/,
-  },
-  {
-    description: 'agent_type 非対応時は reviewer 本文を同梱して起動する',
-    regex: /`agent_type` field が無い事前同期済み runtime では、`agent_type` を渡さず reviewer TOML の `developer_instructions` を message 冒頭へ同梱し、`fork_turns="none"` で起動する/,
+    regex: /高リスク境界に `agent_type="implementer-high"` を渡し、`fork_turns="none"` を指定する/,
   },
   {
     description: 'task_name を role 選択子にしない',
@@ -264,8 +256,12 @@ const ROUTING_CHECKS = [
     regex: /`task_name` は `pre_review_1` \/ `pre_review_2` のような一意名にし、reviewer の role 選択子として扱わない/,
   },
   {
-    description: '未対応 runtime の縮退を事前同期済み定義に限定する',
-    regex: /`agent_type` field が無い環境では、3 role 定義がセッション開始前から同期済みだった場合に限り、未対応 runtime として/,
+    description: 'agent_type field 欠落時は縮退せず停止する',
+    regex: /field 自体が無い場合は役割本文の同梱等で縮退せず停止し、Codex の更新・完全再起動を求める/,
+  },
+  {
+    description: 'multi_agent 無効時は自動縮退せず停止する',
+    regex: /multi_agent 機能が無効でサブエージェントをスポーンできない場合は、実装を始めず停止してユーザーに有効化を依頼し/,
   },
   {
     description: 'agent_type 有・role 不可視なら spawn 前に停止する',
@@ -277,7 +273,7 @@ const ROUTING_CHECKS = [
   },
   {
     description: 'role TOML を model / effort の正本にする',
-    regex: /対応 runtime では `model` \/ `reasoning_effort` を重複指定せず、role TOML を正本にする/,
+    regex: /`model` \/ `reasoning_effort` を重複指定せず、role TOML を正本にする/,
   },
 ];
 
