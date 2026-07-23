@@ -192,7 +192,7 @@ flowchart LR
 | cross-review | 異種冗長性（N-version programming / diverse redundancy） | 同系統 LLM が共有する盲点を、別ベンダーモデルの独立レビューで相殺。diff 指紋（SHA-256）で両者が同じ版を見たことを機械的に担保 |
 | 故意ずれ検体 | **Mutation testing** | 検知器の新設・変更時に、契約の制約ごとに実装を別々に壊す入力を用意し、期待する非ゼロ終了を確認（検知器の false green 対策） |
 | 検証設計 | **Test oracle** 概念・property-based testing の発想 | 「この退行をどのテストが検知するか」を契約ごとに列挙。隣接する fail-open 実装では合格しない「識別反証」を要求 |
-| Evidence Package | Assurance case / safety case（証拠と主張の索引） | 契約×検証実行×差分を結ぶ「証拠索引」と明示的に位置づけ、レビューの読解責務は免除しない（形式証明ではない） |
+| Evidence Contract / Evidence Package | **Proof-Carrying Code**（Necula & Lee, 1996–97。成果物が自らの正しさの証拠を携行し、受け手は小さな検査器で確認するだけ）＋ Assurance case / safety case（証拠と主張の索引） | PCC の「証拠携行」発想を形式証明抜きで翻案（direction 2026-07-21-3「Evidence-Carrying Direction」の命名も PCC のエコー）。契約に安定ID（`EC-*`）を付け、oracle・故意ずれ・検証ログ・diff 指紋を束縛した Evidence Package として最終 diff に随伴させ、固定 checker が機械検査する。ただし証明ではなく「証拠索引」であり、レビューの読解責務は免除しない |
 | 二者承認・ledger | Two-person rule / dual control、監査ログ（append-only ledger） | Seal は同一 diff 指紋への pre + cross 二者承認が完了条件。帳簿は固定 checker だけが生成し手書き禁止、fail-closed 設計 |
 | friction ループ | カイゼン／レトロスペクティブ、SRE の toil 計測 | 逸脱を1行ずつ記録し、閾値到達で手法スキル自体を改訂 → プラグインとして再配布。実測（session-metrics）で裏を取る |
 | 機械ゲート | CI quality gates | 全レーン共通の土台。レビューを減らした Sign / Show の「受け皿」として明示的に位置づける |
