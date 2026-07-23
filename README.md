@@ -9,7 +9,7 @@
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
 | `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` | Claude Code / Codex 両方 |
-| `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents + `SubagentStop` 報告ゲート hook | Claude Code のみ |
+| `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
 - `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Sign / Seal）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。**レーンは爆発半径だけで判定・宣言し、direction の有無とは独立**（direction は設計合意の道具）: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（デフォルト）はプレレビュー**1回・must のみ**で `cross-review` 省略、Sign（高リスク・検知器の新設/変更）は pre+cross 各1回・統合裁定・must 1バッチ修正・再レビューなし、Seal（**不可逆×外部影響**が重なる変更のみ）は direction フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
@@ -23,7 +23,6 @@ Seal の Evidence Package は、direction で明示した既知契約と、そ�
 したがって、Package にないコードを確認不要とは扱わず、Package が green であってもレビューの読解責務を免除しない。
 
 - Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ role と実行 model を含む終了通知を出す（model 欠損入力では role のみ）。実行中は既存の Active 表示で確認する
-- Claude Code の `SubagentStop` 報告ゲート hook — サブエージェント自身の transcript（`agent_transcript_path`）で、最新の非meta user実作業指示、または `origin.kind` が `coordinator` のmeta user指示より後だけを判定する。それ以外のmeta reminderとtool_resultは指示境界にしない。`agent_type` が完全一致で `dev-method-claude:reviewer` のときは `レビュー完了報告:`・`diff指紋:`・`指摘:`・`承認可否:`、それ以外は `完了報告:`・`検証証跡:`・`逸脱:`・`未達事項:` を各行頭に持つ `SendMessage` が必要。本文は `input.message`、無ければ文字列の `input.content` だけを読み、`summary` / `to` は判定に使わない。Show reviewer は `diff指紋: 対象外（Show）` とする。再入時（`stop_hook_active`）はブロックせず、入力パース不能・transcript 不在・認識可能行ゼロは fail-open（判定不能として続行）
 - `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。固定スクリプト `references/session-metrics.mjs` で時間内訳を決定論的に集計する。direction を書いた作業の完了記載時は必須実行し（レーン非依存。実働欄を実測確定）、それ以外は「時間がかかった」と感じたときの主観トリガーで呼ぶ。スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
 - `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
 - `scenario-kit` — Playwright 録画を軸にした3用途ツール: ブランド付きデモ動画（`run`）、リリースノート・ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`。ランタイム異常検知＋証跡を残す）。1つのシナリオを3用途へ使い回すのが基本形で、接続先が異なる場合だけ `<name>-local.json` 等の変種に分ける
@@ -96,7 +95,6 @@ Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` 
 
 - Codex 版 team-impl の interrupt_agent 運用、並列スポーンの安定性、agents 定義の反映タイミング
 - Codex 版 reviewer プロファイルの read-only 強制（spawn_agent に sandbox 相当の指定がなく、プロンプト指示のみに依存。2026-07-16 追加）
-- `dev-method-claude` の SubagentStop 報告ゲート hook のプラグイン経由発火（**2026-07-23 実測で不発を確認**: 0.1.55 キャッシュに hooks.json 搭載済みの環境で、SendMessage 報告なしで終了する `dev-method-claude:reviewer` を spawn したところ、ブロックされず素通りし、subagent transcript にも hook 実行痕跡ゼロ。`$PLUGIN_ROOT` 展開以前に hook 自体が起動していない。2026-07-19 の実機確認は settings.json 直書き probe によるもので、プラグイン配布経路の発火は未達成。原因切り分け（プラグイン hooks の読み込み条件・matcher・クライアント版数）が必要）
 
 ## 検証済み
 
@@ -104,6 +102,7 @@ Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` 
 - Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐。2026-07-09 初回運用で実測、オプション形式の調整後に動作）
 - Codex 版 team-impl の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
 - Codex 版 team-impl の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
+- Claude 版 SubagentStop 報告ゲート hook の撤去（2026-07-23）: プラグイン経由の発火が実測で不発（報告なし終了の reviewer が素通り・transcript に hook 痕跡ゼロ。settings.json 直書き probe では発火実績あり）のため、hook 本体・fixture ハーネスごと削除した。teammate の報告不達対策は agents 定義の明示配送条項と催促上限の運用を正本に戻す
 - `agent_type` 前提化（2026-07-23）: ユーザー環境の Codex で `spawn_agent` schema に `agent_type` が常在することを確認し、未対応 runtime 向けの役割本文同梱縮退（モデル配分不成立の記録つき）をスキル・README から撤去した。`agent_type` field 自体が無い場合は縮退せず停止する fail-closed へ変更
 - Codex CLI `0.145.0-alpha.24` の custom role routing（2026-07-20実測）: `agent_type` + `fork_turns="none"` で implementer = GPT-5.6 Terra/medium、implementer-high = GPT-5.6 Sol/high、reviewer = GPT-5.6 Sol/high を選択し、implementer の follow-up でも同じ role / model / effort を維持。これは CLI alpha の確認であり、Codex Desktop / IDE の現セッションへの反映は現在の tool schema で別途判定する
 - Codex セッション JSONL の cwd・正常/中断ターン境界・ツール call/output・MCP 所要時間・累積トークン量の抽出（2026-07-11 実在ログで確認）
