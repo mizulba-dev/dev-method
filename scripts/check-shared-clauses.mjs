@@ -469,6 +469,18 @@ const CLAUSE_PAIRS = [
     fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
     regex: /Evidence Packageを要求されたSealでworktree分離を使わない場合は.*/,
   },
+  {
+    id: 'リーダー: 報告不達引き取り前の停止と書込オーナー移管（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /報告不達で工程を引き取る前に、担当へ停止指示を送り.*/,
+  },
+  {
+    id: '必須実測: turn窓限定検算の定義（method-check ↔ direction）',
+    fileA: 'src/plugin/skills/method-check/SKILL.md',
+    fileB: 'src/plugin/skills/direction/SKILL.md',
+    regex: /検算は Claude \/ Codex とも turn 窓限定の `turnWindowActiveMs` 対 `turnWindowCheckMs`（Claude は内部プロンプトを含む窓と計上済み窓に重なる窓を除いた clean 窓、Codex は `duration_ms` を持って閉じた turn 窓。対象窓が無いログは検算不能）/,
+  },
 ];
 
 function normalize(text) {

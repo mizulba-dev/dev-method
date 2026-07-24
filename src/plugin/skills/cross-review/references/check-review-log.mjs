@@ -1,16 +1,38 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
-const [, , logPath, patternRaw, resultOutPath] = process.argv;
+const rawArgs = process.argv.slice(2);
+let allowRaw = null;
+const positional = [];
+for (let i = 0; i < rawArgs.length; i += 1) {
+  if (rawArgs[i] === "--allow") {
+    allowRaw = rawArgs[i + 1];
+    i += 1;
+  } else {
+    positional.push(rawArgs[i]);
+  }
+}
+const [logPath, patternRaw, resultOutPath] = positional;
 
 if (!logPath || !patternRaw) {
   console.error(
     [
-      "使い方: node check-review-log.mjs <event-log-path> <pattern> [result-out-path]",
+      "使い方: node check-review-log.mjs <event-log-path> <pattern> [result-out-path] [--allow <pattern>]",
       "  <pattern> は claude / codex 両モード共通で検証・変更系コマンドの denylist パターン。一致する実行だけを違反とする。",
       "  denylist に一致しない非 git コマンド（閲覧系）は otherCommands の info 列挙に留め、逸脱にはしない。",
+      "  --allow は検知器変更レビューの検体照合実行だけを許可するパターン。一致したサブコマンドは allowedCommands の info 列挙に留める。",
     ].join("\n"),
   );
   process.exit(1);
+}
+
+let allowPattern = null;
+if (allowRaw != null) {
+  try {
+    allowPattern = new RegExp(allowRaw);
+  } catch {
+    console.error(`check-review-log: --allow パターンを正規表現として解釈できません: ${allowRaw}`);
+    process.exit(1);
+  }
 }
 
 let pattern;
@@ -31,10 +53,17 @@ try {
 
 const lines = raw.split("\n").filter((line) => line.trim().length > 0);
 
-// codex exec --json はシェルラッパー越しにコマンドを渡す（例: /bin/zsh -lc 'git diff --stat HEAD'）。
+// codex exec --json はシェルラッパー越しにコマンドを渡す（例: /bin/zsh -lc 'git diff --stat HEAD' /
+// /bin/zsh -lc "sed \"...\" file | node ..."）。二重引用符 payload はシェルの規則で \\ \" \$ \` を復元する。
+// ラッパー形式なのにどちらの payload とも取り出せないコマンドは解析不能（unparseable）として呼び出し側で
+// fail-closed（違反扱い）にする。
 function unwrapShellCommand(command) {
-  const m = /^\/bin\/(?:zsh|bash|sh)\s+-l?c\s+'([\s\S]*)'$/.exec(command);
-  return m ? m[1] : command;
+  const single = /^\/bin\/(?:zsh|bash|sh)\s+-l?c\s+'([\s\S]*)'$/.exec(command);
+  if (single) return { command: single[1], unparseable: false };
+  const double = /^\/bin\/(?:zsh|bash|sh)\s+-l?c\s+"([\s\S]*)"$/.exec(command);
+  if (double) return { command: double[1].replace(/\\([\\"$`])/g, "$1"), unparseable: false };
+  const wrapperLike = /^\/bin\/(?:zsh|bash|sh)\s+-l?c(\s|$)/.test(command);
+  return { command, unparseable: wrapperLike };
 }
 
 // シングル/ダブルクォート（ダブルクォート内の \" エスケープを考慮）の外側にある区切りトークンだけで
@@ -42,6 +71,8 @@ function unwrapShellCommand(command) {
 // クォート外でもバックスラッシュエスケープされた区切り文字（例: echo foo\|bar の \|）は分割しない
 // （\\ の連続も 2 文字単位で消費するため、\\| のような「エスケープされた \」+「素の |」は正しく分割される）。
 // separators は長いトークンから順にマッチを試す（|| を | 2つに誤分割しないため）。
+// 走査終了時にクォートが閉じていないコマンドは分割結果を信頼できない（区切りがクォート内へ吸われて素通りする）
+// ため unbalanced を返し、呼び出し側で fail-closed（違反扱い）にする。
 function splitOutsideQuotes(command, separators) {
   const parts = [];
   let current = "";
@@ -82,7 +113,10 @@ function splitOutsideQuotes(command, separators) {
     i += 1;
   }
   parts.push(current);
-  return parts.map((part) => part.trim()).filter((part) => part.length > 0);
+  return {
+    parts: parts.map((part) => part.trim()).filter((part) => part.length > 0),
+    unbalanced: quote !== null,
+  };
 }
 
 // 複合コマンド（例: git diff HEAD && go test ./...）を ; && || で独立ステートメントに分割し、
@@ -91,16 +125,19 @@ function splitOutsideQuotes(command, separators) {
 // （head/tail/wc/grep/rg/sort/awk/cut/uniq/sed/nl/jq/cat/tr）なら許可、
 // それ以外（xargs/sh/tee 等の書込・実行系）は無条件で違反として扱う。
 function splitCommand(command) {
-  const statements = splitOutsideQuotes(command, ["&&", "||", ";"]);
+  const statementSplit = splitOutsideQuotes(command, ["&&", "||", ";"]);
+  let unbalanced = statementSplit.unbalanced;
   const primaries = [];
   const pipeFollowers = [];
-  for (const stmt of statements) {
-    const pipeline = splitOutsideQuotes(stmt, ["|"]);
+  for (const stmt of statementSplit.parts) {
+    const pipelineSplit = splitOutsideQuotes(stmt, ["|"]);
+    unbalanced = unbalanced || pipelineSplit.unbalanced;
+    const pipeline = pipelineSplit.parts;
     if (pipeline.length === 0) continue;
     primaries.push(pipeline[0]);
     pipeFollowers.push(...pipeline.slice(1));
   }
-  return { primaries, pipeFollowers };
+  return { primaries, pipeFollowers, unbalanced };
 }
 
 const READ_ONLY_PIPE_FILTER = /^(head|tail|wc|grep|rg|sort|awk|cut|uniq|sed|nl|jq|cat|tr)\b/;
@@ -178,12 +215,21 @@ function parseReviewResult(resultText) {
 // denylist（検証・変更系コマンド）に一致する実行だけを違反とする。パイプ後段は read-only
 // フィルタなら無視し、それ以外（xargs/sh/tee 等）は無条件で違反に含める。denylist に一致しない
 // 非 git コマンド（閲覧系）は違反にせず、hasNonGit で otherCommands 判定に使う。
-function classifyCommand(command) {
-  const { primaries, pipeFollowers } = splitCommand(command);
+// --allow パターン（検知器変更レビューの検体照合実行の許可）に一致するサブコマンドは違反にせず
+// allowed へ列挙する。解析不能（クォート不均衡・unwrap 不能ラッパー）は allow より優先して違反とする
+// （何が実行されたか検証できない実行を許可しない）。
+function classifyCommand(command, wrapperUnparseable = false) {
+  const { primaries, pipeFollowers, unbalanced } = splitCommand(command);
+  if (wrapperUnparseable || unbalanced) {
+    return { violation: true, hasNonGit: true, unparseable: true, allowed: [] };
+  }
+  const isAllowed = (p) => allowPattern != null && allowPattern.test(p);
+  const allowed = [...primaries, ...pipeFollowers].filter(isAllowed);
   const violation =
-    primaries.some((p) => pattern.test(p)) || pipeFollowers.some((p) => !READ_ONLY_PIPE_FILTER.test(p));
+    primaries.some((p) => !isAllowed(p) && pattern.test(p)) ||
+    pipeFollowers.some((p) => !isAllowed(p) && !READ_ONLY_PIPE_FILTER.test(p));
   const hasNonGit = primaries.some((p) => !GIT_PREFIX.test(p));
-  return { violation, hasNonGit };
+  return { violation, hasNonGit, unparseable: false, allowed };
 }
 
 const entries = [];
@@ -217,7 +263,20 @@ if (!isClaudeMode && !isCodexMode) {
 const violations = [];
 const deniedAttempts = [];
 const otherCommands = [];
+const unparseableCommands = [];
+const allowedCommands = [];
 let lastResultText = null;
+
+function recordClassification(command, classification) {
+  const { violation, hasNonGit, unparseable, allowed } = classification;
+  allowedCommands.push(...allowed);
+  if (violation) {
+    violations.push(command);
+    if (unparseable) unparseableCommands.push(command);
+    return;
+  }
+  if (hasNonGit) otherCommands.push(command);
+}
 
 if (isClaudeMode) {
   // allowedTools はグローバル settings の許可ルールと合成されるため、指定外の閲覧系コマンドも
@@ -248,14 +307,7 @@ if (isClaudeMode) {
         deniedAttempts.push(command);
         continue;
       }
-      const { violation, hasNonGit } = classifyCommand(command);
-      if (violation) {
-        violations.push(command);
-        continue;
-      }
-      if (hasNonGit) {
-        otherCommands.push(command);
-      }
+      recordClassification(command, classifyCommand(command));
     }
   }
 } else if (isCodexMode) {
@@ -267,15 +319,8 @@ if (isClaudeMode) {
       continue;
     }
     if (entry.type !== "item.completed" || entry.item?.type !== "command_execution") continue;
-    const command = unwrapShellCommand(entry.item.command ?? "");
-    const { violation, hasNonGit } = classifyCommand(command);
-    if (violation) {
-      violations.push(command);
-      continue;
-    }
-    if (hasNonGit) {
-      otherCommands.push(command);
-    }
+    const unwrapped = unwrapShellCommand(entry.item.command ?? "");
+    recordClassification(unwrapped.command, classifyCommand(unwrapped.command, unwrapped.unparseable));
   }
 }
 
@@ -300,6 +345,10 @@ if (resultError) {
 const report = {
   violationCount: violations.length,
   violations,
+  unparseableCommandCount: unparseableCommands.length,
+  unparseableCommands,
+  allowedCommandCount: allowedCommands.length,
+  allowedCommands,
   deniedAttemptCount: deniedAttempts.length,
   deniedAttempts,
   otherCommandCount: otherCommands.length,

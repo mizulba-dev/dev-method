@@ -123,7 +123,7 @@ function makeSession(path, client) {
     wallClockMs: 0, userWaitMs: 0, activeMs: 0,
     breakdown: { llmGenerationMs: 0, methodOpsMs: 0, toolExecutionMs: 0, delegationWaitMs: 0, unattributedMs: 0 },
     ...(client === 'codex'
-      ? { durationCheckMs: null, mcpDurationMs: 0, tokens: null }
+      ? { durationCheckMs: null, turnWindowActiveMs: null, turnWindowCheckMs: null, mcpDurationMs: 0, tokens: null }
       : { turnDurationCheckMs: null, turnWindowActiveMs: null, turnWindowCheckMs: null, tokens: null }),
     cutoffBytes: null, // 測定 cutoff（起動時のファイルサイズ）。ファイル解析時のみ設定、配列解析（analyze）では null
     loops: [],
@@ -228,6 +228,7 @@ function createClaudeAnalyzer(methodPaths) {
   let turnWindowActive = null; // clean な turn 窓内で active に分類された時間（clean 窓が1つでもあれば非 null）
   let turnWindowCheck = null; // clean な turn 窓の durationMs 合計（窓限定検算の分母）
   let lastPromptTs = null; // 直近プロンプトの timestamp。窓内部のプロンプト（steering / teammate）検知に使う
+  let lastCountedWindowEnd = null; // 検算へ計上済みの clean 窓の最終終端。重なり窓（入れ子 turn_duration）の二重計上防止に使う
   const turnWindows = []; // 消費待ちの clean 窓。窓終端 ≤ 直近 timeline ts で破棄
   const activeSpans = []; // 窓未到着（turn_duration 前）の active 区間バッファ。窓消費とプロンプトで剪定
 
@@ -297,7 +298,10 @@ function createClaudeAnalyzer(methodPaths) {
         const window = { start: ts - event.durationMs, end: ts };
         // アンカー（窓開始のプロンプト自身）は clock 揺れ許容 1秒。それより後のプロンプトは内部プロンプト＝dirty。
         const dirty = lastPromptTs != null && lastPromptTs > window.start + 1000;
-        if (!dirty) {
+        // 計上済み clean 窓と重なる窓（同一プロンプトへアンカーされた入れ子 turn_duration。実ログで観測）は、
+        // 同じ壁時計を check 側へ二重計上するため検算から除外する（1秒は clock 揺れ許容）。
+        const overlapsCounted = lastCountedWindowEnd != null && window.start < lastCountedWindowEnd - 1000;
+        if (!dirty && !overlapsCounted) {
           if (turnWindowActive == null) { turnWindowActive = 0; turnWindowCheck = 0; }
           turnWindowCheck += event.durationMs;
           for (const [start, end] of activeSpans) {
@@ -305,6 +309,7 @@ function createClaudeAnalyzer(methodPaths) {
             if (overlap > 0) turnWindowActive += overlap;
           }
           turnWindows.push(window); // 窓終端をまたぐ区間（境界分割の head）の重なりは noteActive 側で加算する
+          lastCountedWindowEnd = lastCountedWindowEnd == null ? window.end : Math.max(lastCountedWindowEnd, window.end);
         }
         activeSpans.length = 0; // 窓終端以前に分類済みの区間は以後の窓（次プロンプト以降開始）と重ならない
       }
@@ -396,6 +401,11 @@ function createCodexAnalyzer(methodPaths) {
   let orphanCount = 0;
   let firstTs = null; let lastTs = null;
   let prevTs = null; let inTurn = false; let taint = false; let prevUnknown = false;
+  // 閉じた turn 窓限定の検算バッファ。turn 内 active を貯め、duration_ms を持つ終端イベントで確定した turn だけを
+  // turnWindowActive / turnWindowCheck へ加算する。進行中ターン（EOF まで終端なし）と duration_ms の無い終端は
+  // バッファを破棄して検算から除外する（activeMs 自体には計上済みのまま。実測 cutoff が turn 途中でも検算が成立する）。
+  let turnActiveBuf = 0;
+  let turnWindowActive = null; let turnWindowCheck = null;
 
   const addInterval = (curr, currTs) => {
     if (prevTs == null) return;
@@ -410,6 +420,7 @@ function createCodexAnalyzer(methodPaths) {
     else if (curr.methodOpCall) bucket = 'methodOpsMs';
     else bucket = 'llmGenerationMs';
     session.breakdown[bucket] += gap;
+    turnActiveBuf += gap;
   };
 
   const feed = (line) => {
@@ -458,11 +469,18 @@ function createCodexAnalyzer(methodPaths) {
     }
     // turn 境界と pending 追加を反映する。turn 終端では残留 pending を orphan として計上しクリアする
     // （中断で残留すると以後の turn 外区間へ pending が漏れて toolExecution/delegationWait を誤算入するため）。
-    if (event.type === 'event_msg' && nested === 'task_started') inTurn = true;
+    if (event.type === 'event_msg' && nested === 'task_started') { inTurn = true; turnActiveBuf = 0; }
     else if (event.type === 'event_msg' && (nested === 'task_complete' || nested === 'turn_aborted')) {
       inTurn = false;
       orphanCount += pending.size;
       pending.clear();
+      // duration_ms を持つ終端だけを閉じた turn 窓として検算へ確定する。持たない終端はバッファ破棄。
+      if (Number.isFinite(event.payload.duration_ms)) {
+        if (turnWindowActive == null) { turnWindowActive = 0; turnWindowCheck = 0; }
+        turnWindowActive += turnActiveBuf;
+        turnWindowCheck += event.payload.duration_ms;
+      }
+      turnActiveBuf = 0;
     }
     if (event.type === 'response_item' && (nested === 'function_call' || nested === 'custom_tool_call') && event.payload.call_id) {
       pending.set(event.payload.call_id, { methodOp: curr.methodOpCall, delegation: DELEGATION_NAMES.has(event.payload.name) });
@@ -479,6 +497,8 @@ function createCodexAnalyzer(methodPaths) {
     session.loops = [...loops.values()].filter((entry) => entry.count >= 3).map(({ tool, path, count }) => ({ tool, path, count }));
     session.wallClockMs = firstTs == null || lastTs == null ? 0 : lastTs - firstTs;
     session.durationCheckMs = durationCheckSum;
+    session.turnWindowActiveMs = turnWindowActive;
+    session.turnWindowCheckMs = turnWindowCheck;
     session.mcpDurationMs = Math.round(session.mcpDurationMs);
     finalize(session);
     return session;
