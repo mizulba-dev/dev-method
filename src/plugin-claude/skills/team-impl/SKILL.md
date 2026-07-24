@@ -33,6 +33,8 @@ worktree並列では起動前に統合先checkoutと共通base commitを固定�
 
 最終報告が無いまま idle 通知・ターン終了を検知したら、催促は1回だけ行う。それでも届かなければ diff と検証証跡を直接確認して工程を進め、逸脱として実測フッターに記録する。報告不達で工程を引き取る前に、担当へ停止指示を送り、fixtures・テストを含む対象パスの書込オーナーをリーダー単独へ移してから着手する（並行編集の衝突と生成物の相互削除を防ぐ）。
 
+担当へのメッセージ送信・再開指示の前に、宛先を現行工程の稼働中担当一覧と照合する。完了・解散済み担当への送信・再開は再稼働として扱い、前工程の担当を意図せず再稼働させたことを検知したら直ちに停止指示を送り、対象パスの書込オーナーをリーダー単独へ移してから状態を回収する（誤配送された報告への返信も同じ照合を通す）。
+
 ## プレレビュー（Show）
 
 Show ではプレレビューだけを単独起動し、cross-review と diff 指紋の共同ラウンドは行わない。
@@ -73,7 +75,7 @@ R2 以降のプレレビューは R1 と同じ reviewer teammate への追加指
 
 code ledger では各返却の `approve` を must-fix / should-fix ゼロ、`needs-attention` を1件以上の場合だけ許す。片方の `needs-attention`、または最終承認後だけ現行 diff が変わった `stale_approved_diff` は exit 2 とする。actionable findings を持つラウンドだけを `rework_count` に数え、3回到達時は `next_rework=4` で継続可、4回目の差し戻しまたは5ラウンド未収束は exit 3 とする。approve と指摘の併存、needs-attention と指摘ゼロ、verdict の欠落・文法外値、同一ラウンド内の指紋不整合、reviewer 結果イベント自体の欠落、作業単位・direction hash・session/thread・新規起動イベント・逸脱記録・read-only 監査の不整合は exit 1 とし、既知の exit 2 以外を次ラウンドへ流さない。
 
-共同ラウンドは、先に `cross-review` の手順1〜2だけを実行して作業ディレクトリ・helper・開始時 diff 指紋を準備し、次に reviewer を spawn し、その起動後に完了を待たず `cross-review` の手順3以降を開始する。
+共同ラウンドは、先に `cross-review` の手順1〜2だけを実行して作業ディレクトリ・helper・開始時 diff 指紋を準備し、次に reviewer を spawn し、その起動後に完了を待たず `cross-review` の手順3以降を開始する。契約追補がある場合は、その配布と担当の反映完了確認を開始時 diff 指紋の固定より前に終え、指紋固定からレビュー起動までの間に diff を変える指示を出さない（追補反映で指紋が失効するとラウンド1回分の起動を浪費する）。
 
 同じ開始時指紋に対して、`reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model fable / effort high、`tools` で read-only 制限済み）をバックグラウンド spawn し、その完了を待つ前に `cross-review` をバックグラウンド起動する。reviewer は implementer / implementer-high とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる。
 

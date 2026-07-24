@@ -476,6 +476,12 @@ const CLAUSE_PAIRS = [
     regex: /報告不達で工程を引き取る前に、担当へ停止指示を送り.*/,
   },
   {
+    id: 'リーダー: 宛先照合と誤再稼働の回収（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /担当へのメッセージ送信・再開指示の前に、宛先を現行工程の稼働中担当一覧と照合する.*/,
+  },
+  {
     id: '必須実測: turn窓限定検算の定義（method-check ↔ direction）',
     fileA: 'src/plugin/skills/method-check/SKILL.md',
     fileB: 'src/plugin/skills/direction/SKILL.md',

@@ -4,7 +4,12 @@ import { createHash } from 'node:crypto';
 import { createReadStream, lstatSync, readlinkSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 
-const requestedCwd = process.argv[2] ?? process.cwd();
+// cwd フォールバックは別リポジトリの空 diff を黙って指紋化する誤計測源のため、対象リポジトリの明示引数を必須とする。
+const requestedCwd = process.argv[2];
+if (!requestedCwd) {
+  console.error('使い方: node review-diff-fingerprint.mjs <対象リポジトリの絶対パス>');
+  process.exit(1);
+}
 const rootResult = spawnSync('git', ['rev-parse', '--show-toplevel'], {
   cwd: requestedCwd,
   encoding: 'utf8',

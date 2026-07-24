@@ -898,6 +898,68 @@ function reviewParserFixtures() {
   expect('rv03-codex-shape-and-result', process.execPath, [reviewLogChecker, codexLog, '(^|\\s)(npm test|git commit)(\\s|$)', join(root, 'codex.json')], root, 0);
   const codexBad = join(root, 'codex-bad-verdict.jsonl'); writeFileSync(codexBad, `${JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify({ ...valid, verdict: 'needs-attention' }) } })}\n`);
   expect('rv03-codex-verdict-findings-inconsistent', process.execPath, [reviewLogChecker, codexBad, '(^|\\s)(npm test|git commit)(\\s|$)', join(root, 'codex-bad.json')], root, 1);
+  // 実ログ由来（匿名化・クォート構造を保持）: zsh クォート連結の for/do 閲覧ループと rg|xargs sh -c の
+  // read-only ダンプは違反にしない（2026-07-24 の fail-closed 誤検知2件の再現検体）。故意ずれは制御 keyword
+  // 前置の denylist（^ アンカー素通りの false green 側も固定）・sh -c 内側の実行系/書込系/混入・未終端
+  // クォート・payload 欠落が違反のまま残ることを固定する。denylist は実運用と同じ ^ アンカー形を使う。
+  const anchored = '^(npm\\s+test|git\\s+commit)';
+  const codexCommandCases = [
+    ['real-zsh-concat-loop', "/bin/zsh -lc 'for f in a/one_test.go b/two_test.go; do echo \"FILE:$f\"; sed -n '\"'1,500p' \\\"\"'$f\"; done'", 0, null],
+    ['real-xargs-shc-dump', "/bin/zsh -lc \"rg --files -g 'A.md' -g 'B.md' -g '\"'!vendor'\"' -g '\"'!node_modules'\"' | xargs -r -n1 sh -c 'echo \\\"\"'$0\"; sed -n \"1,260p\" \"$0\"'\"'\"", 0, null],
+    ['drift-loop-denylist', "/bin/zsh -lc 'for f in a b; do npm test; done'", 2, '"violationCount": 1'],
+    ['drift-while-denylist', "/bin/zsh -lc 'while npm test; do cat x; done'", 2, '"violationCount": 1'],
+    ['drift-shc-exec', "/bin/zsh -lc \"rg --files | xargs -n1 sh -c 'npm test'\"", 2, '"violationCount": 1'],
+    ['drift-shc-write', "/bin/zsh -lc \"rg --files | xargs -n1 sh -c 'rm -f x'\"", 2, '"violationCount": 1'],
+    ['drift-shc-mixed', "/bin/zsh -lc \"rg --files | xargs -n1 sh -c 'cat x; npm test'\"", 2, '"violationCount": 1'],
+    ['drift-unbalanced-quote', "/bin/zsh -lc 'echo \"unclosed'", 2, '"unparseableCommandCount": 1'],
+    ['drift-shc-payload-missing', "/bin/zsh -lc 'rg --files | xargs sh -c'", 2, '"unparseableCommandCount": 1'],
+    ['pipe-tee-still-violation', "/bin/zsh -lc 'cat a | tee b'", 2, '"violationCount": 1'],
+    ['drift-case-arm', "/bin/zsh -lc 'case x in x) npm test;; esac'", 2, '"violationCount": 1'],
+    ['drift-brace-group', "/bin/zsh -lc '{ npm test; }'", 2, '"violationCount": 1'],
+    ['drift-subshell', "/bin/zsh -lc '(npm test)'", 2, '"violationCount": 1'],
+    ['drift-env-prefix', "/bin/zsh -lc 'FOO=1 npm test'", 2, '"violationCount": 1'],
+    ['drift-bang-prefix', "/bin/zsh -lc '! npm test'", 2, '"violationCount": 1'],
+    ['drift-substitution', "/bin/zsh -lc 'echo \"$(npm test)\"'", 2, '"violationCount": 1'],
+    ['drift-backtick', "/bin/zsh -lc 'echo `npm test`'", 2, '"violationCount": 1'],
+    ['benign-substitution', "/bin/zsh -lc 'echo \"$(git rev-parse HEAD)\"'", 0, null],
+    ['inert-single-quoted-substitution', "/bin/zsh -lc \"grep 'x$(npm test)' f\"", 0, null],
+    ['drift-wrapper-extra-argv', "/bin/zsh -lc 'eval \"$0\"' 'npm test'", 2, '"unparseableCommandCount": 1'],
+    ['drift-shc-redirect', "rg --files | xargs -n1 sh -c 'echo x > /tmp/x'", 2, '"violationCount": 1'],
+    ['drift-shc-substitution', "rg --files | xargs sh -c 'echo \"$(npm test)\"'", 2, '"violationCount": 1'],
+    ['drift-shc-sed-inplace', "rg --files | xargs -n1 sh -c 'sed -i s/x/y/ \"$0\"'", 2, '"violationCount": 1'],
+    ['shc-stderr-dup-allowed', "rg --files | xargs -n1 sh -c 'echo ok >&2; cat \"$0\"'", 0, null],
+    ['shc-separated-xargs-args', "rg --files | xargs -n 1 sh -c 'echo \"$0\"; sed -n \"1,20p\" \"$0\"'", 0, null],
+    ['xargs-direct-readonly', "find src -type f | sort | xargs rg -n \"pattern\"", 0, null],
+    ['drift-xargs-direct-write', "find src -type f | xargs rm -f", 2, '"violationCount": 1'],
+    ['drift-xargs-direct-sed-inplace', "find src -type f | xargs sed -i s/x/y/", 2, '"violationCount": 1'],
+  ];
+  for (const [name, command, exitCode, outputIncl] of codexCommandCases) {
+    const log = join(root, `cmd-${name}.jsonl`);
+    writeFileSync(log, `${JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command } })}\n${JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: JSON.stringify(valid) } })}\n`);
+    expect(`rv03-cmd-${name}`, process.execPath, [reviewLogChecker, log, anchored, join(root, `cmd-${name}.json`)], root, exitCode, null, outputIncl ? [outputIncl] : []);
+  }
+}
+
+function fingerprintFixtures() {
+  const fpHelper = join(repoRoot, 'src/plugin/skills/cross-review/references/review-diff-fingerprint.mjs');
+  // 引数なしは usage を出して fail-closed（cwd フォールバック廃止。cwd がリポジトリでも成功させない）
+  expect('fp01-arg-required', process.execPath, [fpHelper], repoRoot, 1);
+  const initPlain = (name, dirty) => {
+    const root = join(runsRoot, name);
+    rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true });
+    git(root, ['init', '-q']); git(root, ['config', 'user.email', 'fixture@example.invalid']); git(root, ['config', 'user.name', 'Method Fixture']);
+    writeFileSync(join(root, 'file.txt'), 'base\n');
+    git(root, ['add', '.']); git(root, ['commit', '-qm', 'base']);
+    if (dirty) writeFileSync(join(root, 'file.txt'), 'changed\n');
+    return root;
+  };
+  const dirtyRoot = initPlain('fp01-dirty', true);
+  const cleanRoot = initPlain('fp01-clean', false);
+  // cwd を dev-method に固定したまま引数のリポジトリだけを変え、引数が指紋対象を決める（cwd 非依存）ことを固定する
+  const dirtyRun = expect('fp01-dirty-fingerprint', process.execPath, [fpHelper, dirtyRoot], repoRoot, 0);
+  const cleanRun = expect('fp01-clean-fingerprint', process.execPath, [fpHelper, cleanRoot], repoRoot, 0);
+  const dirtyFp = dirtyRun.stdout.trim(); const cleanFp = cleanRun.stdout.trim();
+  assertion('fp01-hex-and-arg-honored', /^[0-9a-f]{64}$/.test(dirtyFp) && /^[0-9a-f]{64}$/.test(cleanFp) && dirtyFp !== cleanFp, { dirtyFp, cleanFp });
 }
 
 function newFooter({ lane = 'Ask', plan = 'レビュー計画1R・21分（R1 must0+should0+nit0）', code = 'レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0）', planLedger = 'ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true', codeLedger = 'ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true', planOutcome = 'R1 plan approved', codeOutcome = 'R1 code approved', e2e = 'E2E 44分', actual = '実働40分（手法運用10分）', prep = 'Evidence Package 準備2分（開始10:00・終了10:02；テスト5分）', classification = '4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0' } = {}) {
@@ -1213,19 +1275,20 @@ function sessionMetricsFixtures() {
   assertion('mc02-abort-pending-userwait', s0(fcAbortPending).userWaitMs === 8000 && bd(fcAbortPending).toolExecutionMs === 1000 && s0(fcAbortPending).quality.orphanToolUses === 1, { uw: fcAbortPending.json && s0(fcAbortPending).userWaitMs, te: fcAbortPending.json && bd(fcAbortPending).toolExecutionMs, o: fcAbortPending.json && s0(fcAbortPending).quality.orphanToolUses });
   assertion('mc02-abort-pending-invariant', invariantHolds(s0(fcAbortPending)));
 
-  // RC-A(2) turn 外の未知イベント（実在型 inter_agent_communication_metadata）を挟んでも userWait へ一意帰属（EC-MC-2）。
+  // RC-A(2) turn 外の未知イベント（合成の将来型。compacted 等の既知化後も未知経路を固定する）を挟んでも
+  // userWait へ一意帰属（EC-MC-2）。
   const fcExtUnknown = runMetrics([writeLog('fc-codex-external-unknown', [
     xMeta(0), xTaskStart(1000), xTaskComplete(2000, 1000),
-    { type: 'inter_agent_communication_metadata', timestamp: iso(3000), payload: {} },
+    { type: 'future_unknown_kind', timestamp: iso(3000), payload: {} },
     xTaskStart(8000), xTaskComplete(9000, 1000),
   ])]);
   assertion('mc02-external-unknown-userwait', s0(fcExtUnknown).userWaitMs === 7000 && bd(fcExtUnknown).unattributedMs === 0, { uw: fcExtUnknown.json && s0(fcExtUnknown).userWaitMs, un: fcExtUnknown.json && bd(fcExtUnknown).unattributedMs });
 
-  // RC-A(3) turn 内の未知イベント（compacted）の前後両区間が unattributed（prevUnknown 伝播）（EC-MC-2/4）。
-  const fcInnerCompacted = runMetrics([writeLog('fc-codex-inner-compacted', [
-    xMeta(0), xTaskStart(1000), xReason(2000), { type: 'compacted', timestamp: iso(3000), payload: {} }, xReason(4000), xTaskComplete(5000, 4000),
+  // RC-A(3) turn 内の未知イベント（合成の将来型）の前後両区間が unattributed（prevUnknown 伝播）（EC-MC-2/4）。
+  const fcInnerUnknown = runMetrics([writeLog('fc-codex-inner-unknown', [
+    xMeta(0), xTaskStart(1000), xReason(2000), { type: 'future_unknown_kind', timestamp: iso(3000), payload: {} }, xReason(4000), xTaskComplete(5000, 4000),
   ])]);
-  assertion('mc02-inner-compacted-unattributed', bd(fcInnerCompacted).unattributedMs === 2000 && s0(fcInnerCompacted).quality.unknownEvents === 1, { un: fcInnerCompacted.json && bd(fcInnerCompacted).unattributedMs, u: fcInnerCompacted.json && s0(fcInnerCompacted).quality.unknownEvents });
+  assertion('mc02-inner-unknown-unattributed', bd(fcInnerUnknown).unattributedMs === 2000 && s0(fcInnerUnknown).quality.unknownEvents === 1, { un: fcInnerUnknown.json && bd(fcInnerUnknown).unattributedMs, u: fcInnerUnknown.json && s0(fcInnerUnknown).quality.unknownEvents });
 
   // RC-B(1) 入力本文フィールド（old_string 等、空白を含む本文）にのみ手法パスが現れる呼び出しは非計上（EC-MC-3）。
   const fcBodyOnly = runMetrics([writeLog('fc-body-field-method', [
@@ -1282,14 +1345,15 @@ function sessionMetricsFixtures() {
   ])]);
   assertion('mc02-wait-agent-delegation', bd(fcWaitAgent).delegationWaitMs === 4000 && bd(fcWaitAgent).toolExecutionMs === 0, { d: fcWaitAgent.json && bd(fcWaitAgent).delegationWaitMs, te: fcWaitAgent.json && bd(fcWaitAgent).toolExecutionMs });
 
-  // RC-F Codex 実在 top-level 型（compacted / inter_agent_communication_metadata）は unknown、契約列挙済み型
-  // （turn_context / world_state / thread_settings_applied）は unknown にならないことを固定（EC-MC-4）。
+  // RC-F Codex 実在 top-level 型が全て既知集合に含まれ unknown にならないことを固定（compacted /
+  // inter_agent_communication_metadata は 2026-07-25 の既知集合追補で既知化。未知経路の固定は RC-A(2)(3) の
+  // 合成将来型が担う）（EC-MC-4）。
   const fcRealTypes = runMetrics([writeLog('fc-codex-real-types', [
     xMeta(0), { type: 'turn_context', timestamp: iso(100), payload: { type: 'turn_context' } }, { type: 'compacted', timestamp: iso(200), payload: {} },
     xTaskStart(1000), { type: 'event_msg', timestamp: iso(1100), payload: { type: 'thread_settings_applied' } }, xTaskComplete(2000, 1000),
     { type: 'inter_agent_communication_metadata', timestamp: iso(3000), payload: {} }, { type: 'world_state', timestamp: iso(3500), payload: { type: 'world_state' } },
   ])]);
-  assertion('mc04-codex-real-types-unknown-count', s0(fcRealTypes).quality.unknownEvents === 2 && invariantHolds(s0(fcRealTypes)), { u: fcRealTypes.json && s0(fcRealTypes).quality.unknownEvents });
+  assertion('mc04-codex-real-types-unknown-count', s0(fcRealTypes).quality.unknownEvents === 0 && invariantHolds(s0(fcRealTypes)), { u: fcRealTypes.json && s0(fcRealTypes).quality.unknownEvents });
 
   // must: クライアント判別 fail-closed。session_meta が無く既知 top-level 型だけの Codex 風ファイルは exit 1（EC-MC-2/4）。
   const fcNoSessionMeta = runMetrics([writeLog('fc-codex-no-session-meta', [
@@ -1502,12 +1566,39 @@ function sessionMetricsRealTranscriptFixtures(dir, runMetrics, iso, invariantHol
   assertion('mc-real-codex-exit0-invariant', realCodex.status === 0 && invariantHolds(s0(realCodex)), { exit: realCodex.status });
   assertion('mc-real-codex-clean-quality', s0(realCodex).quality.unknownEvents === 0 && s0(realCodex).quality.skippedLines === 0, { q: realCodex.json && s0(realCodex).quality });
   assertion('mc-real-codex-durationcheck-mcp-token', s0(realCodex).durationCheckMs === 9000 && s0(realCodex).mcpDurationMs === 1500 && s0(realCodex).tokens.total_tokens === 12345, { dc: realCodex.json && s0(realCodex).durationCheckMs, mcp: realCodex.json && s0(realCodex).mcpDurationMs });
+
+  // ログ世代交代で追加された Codex イベント種別（tool_search_call/output・web_search_call/end・agent_reasoning・
+  // thread_rolled_back・image_generation_end・compacted・inter_agent_communication_metadata。2026-07-24 実ログ由来の
+  // 種別構成）が unknownEvents を汚染せず、不変式と閉じた turn 窓検算が成立することを固定する。
+  const newKinds = [
+    { type: 'session_meta', timestamp: iso(0), payload: { id: 'anon', cwd: '/anon/repo', source: 'cli' } },
+    { type: 'event_msg', timestamp: iso(500), payload: { type: 'task_started', started_at: iso(500) } },
+    { type: 'response_item', timestamp: iso(1000), payload: { type: 'tool_search_call', id: 'tsc_anon1', call_id: 'call_anon1', status: 'completed' } },
+    { type: 'response_item', timestamp: iso(1500), payload: { type: 'tool_search_output', call_id: 'call_anon1', status: 'completed' } },
+    { type: 'event_msg', timestamp: iso(2000), payload: { type: 'agent_reasoning', text: 'anon' } },
+    { type: 'response_item', timestamp: iso(2500), payload: { type: 'web_search_call', id: 'ws_anon1', status: 'completed' } },
+    { type: 'event_msg', timestamp: iso(3000), payload: { type: 'web_search_end', call_id: 'ws_anon1', query: 'anon' } },
+    { type: 'inter_agent_communication_metadata', timestamp: iso(3500), payload: { sender: 'anon' } },
+    { type: 'event_msg', timestamp: iso(4000), payload: { type: 'thread_rolled_back', num_turns: 1 } },
+    { type: 'event_msg', timestamp: iso(4500), payload: { type: 'image_generation_end', call_id: 'anon-img1' } },
+    { type: 'compacted', timestamp: iso(5000), payload: {} },
+    { type: 'event_msg', timestamp: iso(6000), payload: { type: 'task_complete', duration_ms: 5500, completed_at: iso(6000) } },
+  ];
+  const newKindsPath = join(dir, 'codex-new-event-kinds.jsonl');
+  writeFileSync(newKindsPath, `${newKinds.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  const newKindsRun = runMetrics([newKindsPath]);
+  assertion('mc-codex-new-kinds-clean-quality', newKindsRun.status === 0 && s0(newKindsRun).quality.unknownEvents === 0, { q: newKindsRun.json && s0(newKindsRun).quality });
+  assertion('mc-codex-new-kinds-invariant', invariantHolds(s0(newKindsRun)));
+  assertion('mc-codex-new-kinds-turnwindow', s0(newKindsRun).turnWindowActiveMs === 5500 && s0(newKindsRun).turnWindowCheckMs === 5500, { twa: newKindsRun.json && s0(newKindsRun).turnWindowActiveMs, twc: newKindsRun.json && s0(newKindsRun).turnWindowCheckMs });
+  // tool_search_call→output（1000→1500）と web_search_call→end（2500→3000）は pending 追跡され
+  // toolExecutionMs へ帰属する（llmGeneration への誤帰属だと 1000/4500 の配分が崩れて検知される）。
+  assertion('mc-codex-new-kinds-tool-attribution', s0(newKindsRun).breakdown.toolExecutionMs === 1000 && s0(newKindsRun).breakdown.llmGenerationMs === 4500 && s0(newKindsRun).quality.orphanToolUses === 0, { bd: newKindsRun.json && s0(newKindsRun).breakdown, o: newKindsRun.json && s0(newKindsRun).quality.orphanToolUses });
 }
 
 function main() {
   mkdirSync(runsRoot, { recursive: true }); mkdirSync(logsRoot, { recursive: true });
   evidenceReadinessFixtures(); packageFixtures(); evidencePairRequirementFixtures(); manifestIntegrityFixtures(); resolverFixtures(); toolingFixtures(); detailedToolingFixtures(); waitUsageFixtures(); ledgerFixtures();
-  reviewRuntimeStaticFixtures(); reviewParserFixtures(); methodStatsFixtures(); sessionMetricsFixtures(); concurrentHarnessFixtures(); sharedClauseFixtures();
+  reviewRuntimeStaticFixtures(); reviewParserFixtures(); fingerprintFixtures(); methodStatsFixtures(); sessionMetricsFixtures(); concurrentHarnessFixtures(); sharedClauseFixtures();
   const summary = { generated_at: new Date().toISOString(), total: results.length, passed: results.filter(({ passed }) => passed).length, failed: results.filter(({ passed }) => !passed).length, results };
   writeFileSync(join(workRoot, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ total: summary.total, passed: summary.passed, failed: summary.failed, summary: join(workRoot, 'summary.json') })}\n`);

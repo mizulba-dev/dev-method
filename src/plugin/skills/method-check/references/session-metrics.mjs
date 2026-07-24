@@ -12,15 +12,20 @@ const CLAUDE_TOP = new Set([
   'file-history-snapshot', 'file-history-delta', 'attachment', 'ai-title', 'last-prompt',
 ]);
 const CLAUDE_BLOCK = new Set(['text', 'thinking', 'redacted_thinking', 'tool_use', 'tool_result', 'image']);
-const CODEX_TOP = new Set(['session_meta', 'event_msg', 'response_item', 'turn_context', 'world_state']);
+const CODEX_TOP = new Set([
+  'session_meta', 'event_msg', 'response_item', 'turn_context', 'world_state',
+  'compacted', 'inter_agent_communication_metadata',
+]);
 const CODEX_EVENT_MSG = new Set([
   'task_started', 'task_complete', 'turn_aborted', 'token_count',
   'mcp_tool_call_begin', 'mcp_tool_call_end', 'user_message', 'agent_message',
   'thread_settings_applied', 'patch_apply_begin', 'patch_apply_end', 'sub_agent_activity', 'context_compacted',
+  'agent_reasoning', 'web_search_end', 'thread_rolled_back', 'image_generation_end',
 ]);
 const CODEX_RESPONSE_ITEM = new Set([
   'message', 'reasoning', 'custom_tool_call', 'custom_tool_call_output',
   'function_call', 'function_call_output', 'agent_message',
+  'tool_search_call', 'tool_search_output', 'web_search_call',
 ]);
 // 委譲・バックグラウンド待機系ツール名（契約の「Agent / Task 等」の範囲。Codex の待機ツール wait_agent を含む）。
 const DELEGATION_NAMES = new Set(['Agent', 'Task', 'wait_agent']);
@@ -456,8 +461,11 @@ function createCodexAnalyzer(methodPaths) {
     addInterval(curr, ts);
 
     // 区間分類後に出力・MCP end で pending を解決する。
-    if (event.type === 'response_item' && (nested === 'function_call_output' || nested === 'custom_tool_call_output') && event.payload.call_id) {
+    if (event.type === 'response_item' && (nested === 'function_call_output' || nested === 'custom_tool_call_output' || nested === 'tool_search_output') && event.payload.call_id) {
       pending.delete(event.payload.call_id);
+    }
+    if (event.type === 'event_msg' && nested === 'web_search_end' && event.payload.call_id) {
+      pending.delete(`ws ${event.payload.call_id}`);
     }
     if (event.type === 'event_msg' && nested === 'mcp_tool_call_end') {
       const cid = event.payload.call_id;
@@ -484,6 +492,14 @@ function createCodexAnalyzer(methodPaths) {
     }
     if (event.type === 'response_item' && (nested === 'function_call' || nested === 'custom_tool_call') && event.payload.call_id) {
       pending.set(event.payload.call_id, { methodOp: curr.methodOpCall, delegation: DELEGATION_NAMES.has(event.payload.name) });
+    }
+    // tool_search_call は call_id で tool_search_output と、web_search_call は id で web_search_end の
+    // call_id と対になる。どちらもツール実行として pending 追跡し、区間を toolExecution へ帰属させる。
+    if (event.type === 'response_item' && nested === 'tool_search_call' && event.payload.call_id) {
+      pending.set(event.payload.call_id, { methodOp: false, delegation: false });
+    }
+    if (event.type === 'response_item' && nested === 'web_search_call' && event.payload.id) {
+      pending.set(`ws ${event.payload.id}`, { methodOp: false, delegation: false });
     }
     if (event.type === 'event_msg' && nested === 'mcp_tool_call_begin' && event.payload.call_id) {
       pending.set(`mcp ${event.payload.call_id}`, { methodOp: false, delegation: false });
