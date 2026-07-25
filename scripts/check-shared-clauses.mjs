@@ -92,6 +92,30 @@ const CLAUSE_PAIRS = [
     regex: /最終報告は、各ラベルを行頭に置いた `完了報告:`（変更ファイル一覧と概要）・`検証証跡:`（コマンド、exit code、pass\/fail件数、故意ずれ結果）・`逸脱:`・`未達事項:` の4項目を含める。/,
   },
   {
+    id: '完了報告: implementer の記述規律',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /各項目は結論を先頭に置き、ツール結果で裏付けられる事実だけを書く。.*/,
+  },
+  {
+    id: '完了報告: implementer-high の記述規律',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /各項目は結論を先頭に置き、ツール結果で裏付けられる事実だけを書く。.*/,
+  },
+  {
+    id: 'implementer: 再委譲の上限',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /- 自分で数回のツール呼出しで終わる作業の再委譲、.*/,
+  },
+  {
+    id: 'implementer-high: 再委譲の上限',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /- 自分で数回のツール呼出しで終わる作業の再委譲、.*/,
+  },
+  {
     id: '完了報告: reviewer のrole別行頭ラベルとShow指紋',
     fileA: 'src/plugin-claude/agents/reviewer.md',
     fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
