@@ -1,7 +1,7 @@
 {
   "name": "dev-method-codex",
   "description": "dev-method の Codex 専用部分 — multi_agent サブエージェントによるチーム実装（team-impl）と終了通知 hook。共通スキルは dev-method 本体に。Claude Code にはインストール不要",
-  "version": "0.1.60",
+  "version": "0.1.61",
   "author": {
     "name": "mizulba"
   },
