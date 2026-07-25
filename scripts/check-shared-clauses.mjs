@@ -134,6 +134,18 @@ const CLAUSE_PAIRS = [
     regex: /- 自分で数回のツール呼出しで終わる作業の再委譲、.*/,
   },
   {
+    id: 'implementer: 計画外の追加検証・green後再実行の禁止',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    regex: /- 計画・完了条件・差し戻し指摘の影響範囲のいずれにも無い追加検証を自分の判断で足すこと、.*/,
+  },
+  {
+    id: 'implementer-high: 計画外の追加検証・green後再実行の禁止',
+    fileA: 'src/plugin-claude/agents/implementer-high.md',
+    fileB: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
+    regex: /- 計画・完了条件・差し戻し指摘の影響範囲のいずれにも無い追加検証を自分の判断で足すこと、.*/,
+  },
+  {
     id: '完了報告: reviewer のrole別行頭ラベルとShow指紋',
     fileA: 'src/plugin-claude/agents/reviewer.md',
     fileB: 'src/plugin-codex/skills/team-impl/reviewer.toml',
