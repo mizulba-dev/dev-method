@@ -2,6 +2,24 @@ import { readFileSync } from 'node:fs';
 
 const CLAUSE_PAIRS = [
   {
+    id: '実測フッター: 受理される表記ゆれの固定形（team-impl両版）',
+    fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /フッターの表記ゆれは次の固定形だけを許容する.*/,
+  },
+  {
+    id: '実測フッター: 受理される表記ゆれの固定形（direction ↔ team-impl claude）',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    regex: /フッターの表記ゆれは次の固定形だけを許容する.*/,
+  },
+  {
+    id: '実測フッター: 受理される表記ゆれの固定形（direction ↔ team-impl codex）',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    regex: /フッターの表記ゆれは次の固定形だけを許容する.*/,
+  },
+  {
     id: '完了報告: リーダーへの明示配送契約（team-impl両版）',
     fileA: 'src/plugin-claude/skills/team-impl/SKILL.md',
     fileB: 'src/plugin-codex/skills/team-impl/SKILL.md',

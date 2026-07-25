@@ -6,17 +6,24 @@ import { pathToFileURL } from 'node:url';
 const devNotesDir = join(homedir(), 'dev-notes');
 const frictionPath = join(devNotesDir, 'dev-method', 'friction.md');
 const FOOTER_LINE = /^[-*]?\s*実測:\s*(.+)$/;
-const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|ledger |R1 |E2E |実働|Evidence Package|4分類|差し戻し|リーダー直修正|追補\d|QA\s|smoke\s|逸脱:))/;
+const FIELD_SPLIT = /\s*\/\s*(?=(?:担当|レビュー|ledger |R\d+ |E2E |実働|Evidence Package|4分類|差し戻し|リーダー直修正|追補\d|QA\s|smoke\s|逸脱:))/;
 const QA_GRAMMAR = /^(PASS|FAIL \d+件|BLOCKED|SKIPPED|未実施)$/;
 const SMOKE_GRAMMAR = /^(PASS|FAIL \d+件|評価不能|対象外|未整備)$/;
 const PARALLEL_REVIEW_GRAMMAR = /^レビュー並列(\d+)R・(\d+)分（R1 pre must(\d+)\+should(\d+)；cross must(\d+)\+should(\d+)；固有 pre(\d+)\+cross(\d+)；重複(\d+)）$/;
-const PLAN_REVIEW_GRAMMAR = /^レビュー計画(\d+)R・(\d+)分（R1 must(\d+)\+should(\d+)\+nit(\d+)）$/;
-const CODE_REVIEW_GRAMMAR = /^レビューコード(\d+)R・(\d+)分（R1 pre must(\d+)\+should(\d+)；cross must(\d+)\+should(\d+)；固有 pre(\d+)\+cross(\d+)；重複(\d+)）$/;
-const PLAN_LEDGER_GRAMMAR = /^ledger plan 結果受領(\d+)\/(\d+)・合意直前(\d+)\/(\d+)・stale(\d+)・eligible=(true|false)$/;
-const CODE_LEDGER_GRAMMAR = /^ledger code 両結果受領(\d+)\/(\d+)・完了直前(\d+)\/(\d+)・stale(\d+)・eligible=(true|false)$/;
+// 分値の「約」接頭・R2以降のラウンド別内訳・0R（省略注記）・境界別内訳（N境界×各MR、／区切り）・対象外/eligibleの括弧注記は
+// 実フッターで反復した表記のため文法として受理する。数値は R1（境界別は全境界の合算）だけを集計に使う。
+const PLAN_REVIEW_GRAMMAR = /^レビュー計画(\d+)R・約?(\d+)分（R1 must(\d+)\+should(\d+)\+nit(\d+)((?:；R\d+ must\d+\+should\d+\+nit\d+)*)）$/;
+// 0R（レビュー省略）は理由の括弧注記を必須とする専用文法だけで受理する。通常文法の rounds=0 は文法外（0R・5分（R1…）等の迂回を塞ぐ）。
+const PLAN_REVIEW_ZERO = /^レビュー計画0R(?:・約?0分)?（[^）]+）$/;
+const CODE_BOUNDARY_BLOCK = /^(?:\S+ )?R1 pre must(\d+)\+should(\d+)；cross must(\d+)\+should(\d+)；固有 pre(\d+)\+cross(\d+)；重複(\d+)$/;
+const CODE_REVIEW_GRAMMAR = /^レビューコード(\d+)R・約?(\d+)分（((?:\S+ )?R1 pre must\d+\+should\d+；cross must\d+\+should\d+；固有 pre\d+\+cross\d+；重複\d+)）$/;
+const CODE_REVIEW_MULTI_GRAMMAR = /^レビューコード(\d+)境界×各(\d+)R・約?(\d+)分（(.+)）$/;
+const CODE_REVIEW_ZERO = /^レビューコード0R(?:・約?0分)?（[^）]+）$/;
+const PLAN_LEDGER_GRAMMAR = /^ledger plan 結果受領(\d+)\/(\d+)・合意直前(\d+)\/(\d+)・stale(\d+)・eligible=(true|false)(?:（([^）]+)）)?$/;
+const CODE_LEDGER_GRAMMAR = /^ledger code 両結果受領(\d+)\/(\d+)・完了直前(\d+)\/(\d+)・stale(\d+)・eligible=(true|false)(?:（([^）]+)）)?$/;
 const OUTCOME_GRAMMAR = {
-  plan: new Set(['approved', 'findings', 'stale_approved_plan']),
-  code: new Set(['approved', 'findings', 'verdict_missing', 'stale_approved_diff']),
+  plan: new Set(['approved', 'findings', 'stale_approved_plan', 'needs-attention', '対象外']),
+  code: new Set(['approved', 'findings', 'verdict_missing', 'stale_approved_diff', 'needs-attention', '対象外']),
 };
 const CLASSIFICATION_GRAMMAR = /^4分類 plan-escape(\d+)\+implementation-deviation(\d+)\+evidence-gap(\d+)\+new-risk(\d+)$/;
 // 4レーン: Evidence 型フッターは Sign / Seal（旧 Ask を Seal 系譜として読む）。Seal 系譜だけが ledger を持ち dogfood 適格。
@@ -58,7 +65,7 @@ function parseLedger(seg, phase, row, warnings) {
     return;
   }
   const [received, receivedExpected, final, finalExpected, stale] = match.slice(1, 6).map(Number);
-  row[phase].ledger = { received, receivedExpected, final, finalExpected, stale, eligible: match[6] === 'true' };
+  row[phase].ledger = { received, receivedExpected, final, finalExpected, stale, eligible: match[6] === 'true', note: match[7] ?? null };
 }
 
 function validateLedger(phase, row, warnings) {
@@ -68,9 +75,12 @@ function validateLedger(phase, row, warnings) {
     return false;
   }
   const expectedFinal = ledger.stale + 1;
+  const countsMatch = ledger.received === ledger.receivedExpected && ledger.final === ledger.finalExpected;
+  // eligible=false は帳簿数が揃っていても、注記で理由（backstop 到達・ユーザー判断継続等）が明記されていれば受理する。
+  const eligibleConsistent = ledger.eligible === countsMatch || (!ledger.eligible && countsMatch && ledger.note != null);
   const valid = ledger.receivedExpected === row[phase].rounds
     && ledger.finalExpected === expectedFinal
-    && ledger.eligible === (ledger.received === ledger.receivedExpected && ledger.final === ledger.finalExpected);
+    && eligibleConsistent;
   if (!valid) {
     warnings.push(`${phase} ledgerの観測数/期待数/stale/eligibleが内部不一致`);
   }
@@ -82,14 +92,32 @@ function validateOutcome(phase, row, warnings) {
   const findings = phase === 'plan'
     ? (row.plan.must ?? 0) + (row.plan.should ?? 0) + (row.plan.nit ?? 0)
     : (row.code.preMust ?? 0) + (row.code.preShould ?? 0) + (row.code.crossMust ?? 0) + (row.code.crossShould ?? 0);
+  // 0R（レビュー省略）の phase は outcome 省略または「対象外」だけを受理し、承認判定の対象外とする。
+  if (rounds === 0) {
+    if (outcome != null && outcome !== '対象外') warnings.push(`${phase} 0Rとoutcomeが矛盾`);
+    return false;
+  }
   if (!OUTCOME_GRAMMAR[phase].has(outcome)) {
     warnings.push(`${phase} R1 outcome欠落または文法外`);
+    return false;
+  }
+  if (outcome === '対象外') {
+    warnings.push(`${phase} 対象外outcomeとラウンド数が矛盾`);
     return false;
   }
   if (rounds == null || rounds < 1) {
     warnings.push(`${phase} ラウンド数欠落または0以下`);
     return false;
   }
+  // outcome のラウンド番号は R1（従来固定形）か最終ラウンドのどちらか。それ以外は宣言ラウンドとの照合不能として不成立。
+  const { outcomeRound } = row[phase];
+  if (outcomeRound != null && outcomeRound !== 1 && outcomeRound !== rounds) {
+    warnings.push(`${phase} outcomeのラウンド番号がラウンド数と不一致`);
+    return false;
+  }
+  // needs-attention は指摘残存または未収束のユーザー判断終了。R1 件数からは閉包状態を検証できないため件数整合は課さず、
+  // 有効な非承認 outcome として承認率の分母に含める。
+  if (outcome === 'needs-attention') return true;
   if (outcome === 'approved' && (findings !== 0 || rounds !== 1)) {
     warnings.push(`${phase} approvedとラウンド数/指摘数が矛盾`);
     return false;
@@ -115,9 +143,27 @@ function validateCodeBreakdown(row, warnings) {
     warnings.push('code R1 pre/cross内訳または固有/重複欠落');
     return false;
   }
-  const valid = uniquePre + duplicate === preMust + preShould && uniqueCross + duplicate === crossMust + crossShould;
+  // 境界別内訳は各境界単位で整合を検査済み（合算では境界間の過不足が相殺され得るため合算検査で代用しない）。
+  const valid = row.code.boundaries != null
+    ? !row.code.blockInconsistent
+    : uniquePre + duplicate === preMust + preShould && uniqueCross + duplicate === crossMust + crossShould;
   if (!valid) warnings.push('code R1 pre/cross内訳と固有/重複が不整合');
   return valid;
+}
+
+function parseCodeBoundaryBlocks(inner, row) {
+  const blocks = inner.split(/\s*／\s*/);
+  if (blocks.length !== row.code.boundaries) return false;
+  const totals = [0, 0, 0, 0, 0, 0, 0];
+  for (const block of blocks) {
+    const m = block.match(CODE_BOUNDARY_BLOCK);
+    if (!m) return false;
+    const values = m.slice(1).map(Number);
+    if (values[4] + values[6] !== values[0] + values[1] || values[5] + values[6] !== values[2] + values[3]) row.code.blockInconsistent = true;
+    values.forEach((value, index) => { totals[index] += value; });
+  }
+  [row.code.preMust, row.code.preShould, row.code.crossMust, row.code.crossShould, row.code.uniquePre, row.code.uniqueCross, row.code.duplicate] = totals;
+  return true;
 }
 
 export function parseFooter(body) {
@@ -126,28 +172,54 @@ export function parseFooter(body) {
   for (const seg of body.split(FIELD_SPLIT).map((s) => s.trim())) {
     let m;
     if ((m = seg.match(/^レーン(\S+)$/))) { row.lane = m[1]; continue; }
-    if ((m = seg.match(PLAN_REVIEW_GRAMMAR))) {
+    if ((m = seg.match(PLAN_REVIEW_GRAMMAR)) && Number(m[1]) > 0) {
       row.newFormat = true;
-      [row.plan.rounds, row.plan.minutes, row.plan.must, row.plan.should, row.plan.nit] = m.slice(1).map(Number);
+      [row.plan.rounds, row.plan.minutes, row.plan.must, row.plan.should, row.plan.nit] = m.slice(1, 6).map(Number);
+      // ラウンド別内訳は任意だが、書くなら R2 から宣言ラウンドまでの連番に限る（欠番・重複・番号飛びは不一致）。
+      const extraRounds = [...m[6].matchAll(/；R(\d+) /g)].map((x) => Number(x[1]));
+      if (extraRounds.length > 0 && (extraRounds.length + 1 !== row.plan.rounds || extraRounds.some((value, index) => value !== index + 2))) {
+        warnings.push('計画レビューのラウンド別内訳とラウンド数不一致');
+      }
+      continue;
+    }
+    if (PLAN_REVIEW_ZERO.test(seg)) {
+      row.newFormat = true;
+      [row.plan.rounds, row.plan.minutes, row.plan.must, row.plan.should, row.plan.nit] = [0, 0, 0, 0, 0];
       continue;
     }
     if (/^レビュー計画/.test(seg)) { row.newFormat = true; row.plan.invalid = true; warnings.push('計画レビュー文法外'); continue; }
-    if ((m = seg.match(CODE_REVIEW_GRAMMAR))) {
+    if ((m = seg.match(CODE_REVIEW_GRAMMAR)) && Number(m[1]) > 0) {
       row.newFormat = true;
-      [row.code.rounds, row.code.minutes, row.code.preMust, row.code.preShould, row.code.crossMust, row.code.crossShould, row.code.uniquePre, row.code.uniqueCross, row.code.duplicate] = m.slice(1).map(Number);
+      [row.code.rounds, row.code.minutes] = [Number(m[1]), Number(m[2])];
+      [row.code.preMust, row.code.preShould, row.code.crossMust, row.code.crossShould, row.code.uniquePre, row.code.uniqueCross, row.code.duplicate] = m[3].match(CODE_BOUNDARY_BLOCK).slice(1).map(Number);
+      continue;
+    }
+    if ((m = seg.match(CODE_REVIEW_MULTI_GRAMMAR)) && Number(m[1]) > 0 && Number(m[2]) > 0) {
+      row.newFormat = true;
+      [row.code.boundaries, row.code.rounds, row.code.minutes] = m.slice(1, 4).map(Number);
+      if (parseCodeBoundaryBlocks(m[4], row)) continue;
+      row.code.invalid = true; warnings.push('コードレビュー文法外'); continue;
+    }
+    if (CODE_REVIEW_ZERO.test(seg)) {
+      row.newFormat = true;
+      [row.code.rounds, row.code.minutes, row.code.preMust, row.code.preShould, row.code.crossMust, row.code.crossShould, row.code.uniquePre, row.code.uniqueCross, row.code.duplicate] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
       continue;
     }
     if (/^レビューコード/.test(seg)) { row.newFormat = true; row.code.invalid = true; warnings.push('コードレビュー文法外'); continue; }
     if (/^ledger plan /.test(seg)) { row.newFormat = true; if (seg === 'ledger plan 対象外') row.plan.ledgerNA = true; else parseLedger(seg, 'plan', row, warnings); continue; }
     if (/^ledger code /.test(seg)) { row.newFormat = true; if (seg === 'ledger code 対象外') row.code.ledgerNA = true; else parseLedger(seg, 'code', row, warnings); continue; }
-    if ((m = seg.match(/^R1 plan (\S+)$/))) { row.newFormat = true; row.plan.outcome = m[1]; continue; }
-    if ((m = seg.match(/^R1 code (\S+)$/))) { row.newFormat = true; row.code.outcome = m[1]; continue; }
-    if ((m = seg.match(/^E2E (\d+)分$/))) { row.newFormat = true; row.e2eMinutes = Number(m[1]); continue; }
+    // outcome の中黒注記は needs-attention だけに許す（approved 等への自由文の付加は outcome 不成立として扱い、欠落警告に落とす）。
+    if ((m = seg.match(/^R(\d+) (plan|code) ([^・\s（]+)(・.+|（[^）]*）)?$/))) {
+      row.newFormat = true;
+      if (m[4]?.startsWith('・') && m[3] !== 'needs-attention') continue;
+      row[m[2]].outcomeRound = Number(m[1]); row[m[2]].outcome = m[3]; continue;
+    }
+    if ((m = seg.match(/^E2E 約?(\d+)分$/))) { row.newFormat = true; row.e2eMinutes = Number(m[1]); continue; }
     if (/^E2E /.test(seg)) { row.newFormat = true; warnings.push('E2E文法外'); continue; }
     // 実働欄はレーン不問（Show 簡易フッターにも載る）。newFormat 判定には関与させない。
     if ((m = seg.match(/^実働(\d+)分（手法運用(\d+)分）$/))) { row.actualMinutes = Number(m[1]); row.methodOpsMinutes = Number(m[2]); continue; }
     if (/^実働/.test(seg)) { row.actualInvalid = true; warnings.push('実働欄文法外'); continue; }
-    if (seg === 'Evidence Package 対象外') { row.newFormat = true; row.evidenceNA = true; continue; }
+    if (/^Evidence Package 対象外(?:（[^）]*）)?$/.test(seg)) { row.newFormat = true; row.evidenceNA = true; continue; }
     if ((m = seg.match(/^Evidence Package 準備(\d+)分（開始(\d{2}:\d{2})・終了(\d{2}:\d{2})；テスト(\d+)分）$/))) {
       row.newFormat = true;
       row.evidencePrepMinutes = Number(m[1]); row.evidencePrepStart = m[2]; row.evidencePrepEnd = m[3]; row.evidenceTestMinutes = Number(m[4]);
@@ -193,7 +265,8 @@ export function parseFooter(body) {
     if (row.evidencePrepMinutes == null && !row.evidenceNA) warnings.push('Evidence Package準備時間欠落');
     row.code.breakdownEligible = validateCodeBreakdown(row, warnings);
     if (!row.classification) warnings.push('4分類欠落');
-    else if (!row.code.breakdownEligible || row.classification.reduce((total, value) => total + value, 0) !== row.code.uniquePre + row.code.uniqueCross + row.code.duplicate) {
+    // code 0R（レビュー省略）では 4分類の出どころがレビュー指摘に限らない（機械ゲート・帳簿由来）ため、R1 内訳との合計整合は課さない。
+    else if (row.code.rounds !== 0 && (!row.code.breakdownEligible || row.classification.reduce((total, value) => total + value, 0) !== row.code.uniquePre + row.code.uniqueCross + row.code.duplicate)) {
       warnings.push('4分類合計がcode R1固有/重複合計と不整合');
       row.classification = null;
     }
@@ -312,8 +385,9 @@ function main() {
   console.log(`- dogfood適格件数: ${dogfoodRows.length}`);
   console.log(`- plan R1承認率（dogfood適格のみ）: ${ratio(approved('plan'), dogfoodRows.filter((row) => row.evidence.plan.outcomeEligible).length)}`);
   console.log(`- code R1承認率（dogfood適格のみ）: ${ratio(approved('code'), dogfoodRows.filter((row) => row.evidence.code.outcomeEligible).length)}`);
-  console.log(`- plan平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.plan.minutes != null).map((row) => row.evidence.plan.minutes))}`);
-  console.log(`- code平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.code.minutes != null).map((row) => row.evidence.code.minutes))}`);
+  // 0R（レビュー省略）の 0 分はレビュー所要時間の実績ではないため、平均は実施済み（rounds ≥ 1）だけで取る。
+  console.log(`- plan平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.plan.minutes != null && row.evidence.plan.rounds > 0).map((row) => row.evidence.plan.minutes))}`);
+  console.log(`- code平均レビュー分: ${average(evidenceRows.filter((row) => row.evidence.code.minutes != null && row.evidence.code.rounds > 0).map((row) => row.evidence.code.minutes))}`);
   console.log(`- E2E平均分: ${average(e2eRows.map((row) => row.evidence.e2eMinutes))}`);
   // 実働欄はレーン不問（Show 簡易フッター含む）。集計対象は実働欄を持つ全レーンの有効行。カバレッジ分母は Evidence 系件数を維持。
   const actual = aggregateActual(rows.map((row) => row.parsed));

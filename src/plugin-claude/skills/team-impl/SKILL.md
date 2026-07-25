@@ -117,6 +117,8 @@ nit はループの終了条件にせず、各ラウンドで検出された nit
 
    `実測: レーンSeal / 担当<model/effort> / レビュー計画1R・21分（R1 must0+should0+nit0） / レビューコード1R・23分（R1 pre must0+should0；cross must0+should0；固有 pre0+cross0；重複0） / ledger plan 結果受領1/1・合意直前1/1・stale0・eligible=true / ledger code 両結果受領1/1・完了直前1/1・stale0・eligible=true / R1 plan approved / R1 code approved / E2E 44分 / 実働30分（手法運用8分） / Evidence Package 準備2分（開始10:00・終了10:02；テスト5分） / 4分類 plan-escape0+implementation-deviation0+evidence-gap0+new-risk0 / 差し戻し0 / リーダー直修正0 / 追補0（契約0） / smoke 対象外 / 逸脱: なし`
 
+   フッターの表記ゆれは次の固定形だけを許容する（method-stats が受理する範囲。これ以外の即興表記は文法外警告で集計から落ちる）: 実施しなかったレビュー工程は理由必須の `0R（理由）`（分値は省略または `0分`）と記載し、対応する outcome は省略または `対象外` とする。計画レビューのラウンド別内訳は R2 から宣言ラウンドまでの連番で併記できる。複数境界のコードレビューは `N境界×各MR・X分（<境界名> R1 … ／ …）` の境界別内訳で記載する。分値の `約` 接頭と ledger・outcome への括弧注記を許容し、outcome の中黒注記は `needs-attention` に限る。
+
    計画レビューとコード共同レビューは各ラウンドの開始から結果集約までの工程別壁時計を別々に記録し、`E2E`にはその合計を記録する。計画/コードのラウンド数、R1の区分別件数、pre/cross固有・重複、plan/code ledgerの必須2実行点・stale・eligible、plan/code R1 outcome、Evidence Package準備時間（開始・終了・内数のテスト時間）、レビュー指摘の4分類を固定順で持つ。固有／重複は must-fix / should-fix だけを根本原因単位で数え、nit は含めない。smoke は direction 検証設計の定型観点で要否を決めているため、完了報告の時点でテンプレートのいずれかの値に確定させる（評価不能の定義は direction の実測フッター規定に準じる）。実働欄は direction 完了時に session-metrics の実測で記載する（報告時は省略してよい）。
 
 ## 完了条件
