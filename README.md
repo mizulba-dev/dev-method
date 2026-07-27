@@ -9,13 +9,13 @@
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
 | `dev-method` | 共通スキル: `direction` / `setup` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` | Claude Code / Codex 両方 |
-| `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
-| `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
+| `dev-method-claude` | `execution`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
+| `dev-method-codex` | `execution`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
 - `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Sign / Seal）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。**レーンは爆発半径だけで判定・宣言し、direction の有無とは独立**（direction は設計合意の道具）: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（デフォルト）はプレレビュー**1回・must のみ**で `cross-review` 省略、Sign（高リスク・検知器の新設/変更）は pre+cross 各1回・統合裁定・must 1バッチ修正・再レビューなし、Seal（**不可逆×外部影響**が重なる変更のみ）は direction フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
 - `setup` — 実装レーンの常駐トリガーを Claude Code / Codex のグローバル設定へ版付き管理ブロックとして追加・更新・削除する。dry-run と明示承認を挟み、管理外の記述は変更しない
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。追跡済み差分と非 ignore 未追跡を含む SHA-256 指紋を返し、standalone では開始時・返却値・結果受領時の同一性を確認して収束までループする
-- `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。Codex は `spawn_agent` の `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする（`agent_type` field が無い runtime では縮退せず停止して Codex の更新・完全再起動を求める。2026-07-23 に役割本文同梱の縮退経路を撤去）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Sign は pre + cross を各1回だけ起動し、統合裁定して must-fix を1バッチ修正して出荷する（再レビューなし・Evidence/ledger なし）。Show のプレレビュー1回・must のみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
+- `execution` — 計画ファイルを入力に実装〜レビュー〜コミットまで回す実装工程。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/dev-method-*.toml` を自動セットアップ）。Codex は `spawn_agent` の `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする（`agent_type` field が無い runtime では縮退せず停止して Codex の更新・完全再起動を求める。2026-07-23 に役割本文同梱の縮退経路を撤去）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Sign は pre + cross を各1回だけ起動し、統合裁定して must-fix を1バッチ修正して出荷する（再レビューなし・Evidence/ledger なし）。Show のプレレビュー1回・must のみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
 
 ### Evidence Package
 
@@ -29,7 +29,7 @@ Seal の Evidence Package は、direction で明示した既知契約と、そ�
 - `scenario-kit` — Playwright 録画を軸にした3用途ツール: ブランド付きデモ動画（`run`）、リリースノート・ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`。ランタイム異常検知＋証跡を残す）。1つのシナリオを3用途へ使い回すのが基本形で、接続先が異なる場合だけ `<name>-local.json` 等の変種に分ける
 - `bug-diagnosis` — 手強いバグ・性能劣化の診断ループ。再現ループ構築（工程1）を本体に、最小化・仮説立案・計装・正しいシームでの回帰テスト・掃除チェックリストまでを規律化する
 
-plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。team-impl は各クライアントに自分用の1つだけが入るため名前衝突しない。
+plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。execution は各クライアントに自分用の1つだけが入るため名前衝突しない。
 
 ## モデル割当表
 
@@ -38,7 +38,7 @@ plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:di
 | 役割 | Claude 版 | Codex 版 |
 | --- | --- | --- |
 | implementer（通常境界） | Sonnet/medium | GPT-5.6 Terra/medium |
-| implementer-high（高リスク境界） | Opus/high | GPT-5.6 Sol/high |
+| implementer-critical（高リスク境界） | Opus/high | GPT-5.6 Sol/high |
 | プレレビュー reviewer | Fable/high | GPT-5.6 Sol/high |
 
 `cross-review` は実行中のクライアントとは別モデルの CLI を呼ぶ: Codex 上で実行中なら Claude Fable/high を、Claude Code 上で実行中なら Codex の GPT-5.6 Sol/high を呼ぶ。
@@ -96,18 +96,18 @@ plugin 更新後は setup を再実行すると版差を検出して更新する
 
 ## 未検証ポイント
 
-- Codex 版 team-impl の interrupt_agent 運用、並列スポーンの安定性、agents 定義の反映タイミング
+- Codex 版 execution の interrupt_agent 運用、並列スポーンの安定性、agents 定義の反映タイミング
 - Codex 版 reviewer プロファイルの read-only 強制（spawn_agent に sandbox 相当の指定がなく、プロンプト指示のみに依存。2026-07-16 追加）
 
 ## 検証済み
 
-- Codex の plugin ローダーは `agents/` ディレクトリを無視する（2026-07 実測。公式 plugin はすべて skills/ + assets/ のみ）。Codex のエージェント定義は plugin では配布できず `~/.codex/agents/*.toml` 固定のため、Codex 版 team-impl はスキル初回実行時と定義更新時のコピーでセットアップする
+- Codex の plugin ローダーは `agents/` ディレクトリを無視する（2026-07 実測。公式 plugin はすべて skills/ + assets/ のみ）。Codex のエージェント定義は plugin では配布できず `~/.codex/agents/*.toml` 固定のため、Codex 版 execution はスキル初回実行時と定義更新時のコピーでセットアップする
 - Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐。2026-07-09 初回運用で実測、オプション形式の調整後に動作）
-- Codex 版 team-impl の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
-- Codex 版 team-impl の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
+- Codex 版 execution の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
+- Codex 版 execution の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
 - Claude 版 SubagentStop 報告ゲート hook の撤去（2026-07-23）: プラグイン経由の発火が実測で不発（報告なし終了の reviewer が素通り・transcript に hook 痕跡ゼロ。settings.json 直書き probe では発火実績あり）のため、hook 本体・fixture ハーネスごと削除した。teammate の報告不達対策は agents 定義の明示配送条項と催促上限の運用を正本に戻す
 - `agent_type` 前提化（2026-07-23）: ユーザー環境の Codex で `spawn_agent` schema に `agent_type` が常在することを確認し、未対応 runtime 向けの役割本文同梱縮退（モデル配分不成立の記録つき）をスキル・README から撤去した。`agent_type` field 自体が無い場合は縮退せず停止する fail-closed へ変更
-- Codex CLI `0.145.0-alpha.24` の custom role routing（2026-07-20実測）: `agent_type` + `fork_turns="none"` で implementer = GPT-5.6 Terra/medium、implementer-high = GPT-5.6 Sol/high、reviewer = GPT-5.6 Sol/high を選択し、implementer の follow-up でも同じ role / model / effort を維持。これは CLI alpha の確認であり、Codex Desktop / IDE の現セッションへの反映は現在の tool schema で別途判定する
+- Codex CLI `0.145.0-alpha.24` の custom role routing（2026-07-20実測）: `agent_type` + `fork_turns="none"` で implementer = GPT-5.6 Terra/medium、implementer-high = GPT-5.6 Sol/high、reviewer = GPT-5.6 Sol/high を選択し、implementer の follow-up でも同じ role / model / effort を維持。**この実測は接頭辞なしの旧 role 名で行ったもので、`dev-method-` 接頭辞付きの現行 role 名での spawn は未実測**（2026-07-28 の改名時点。routing 機構自体は同じだが、新 role 名の可視化には `~/.codex/agents/` の同期と Codex の完全再起動が要る）。これは CLI alpha の確認であり、Codex Desktop / IDE の現セッションへの反映は現在の tool schema で別途判定する
 - Codex セッション JSONL の cwd・正常/中断ターン境界・ツール call/output・MCP 所要時間・累積トークン量の抽出（2026-07-11 実在ログで確認）
 - Claude Code の `SubagentStop` hook 入力 JSON のフィールド実名（2026-07-19 probe hook で実測）: `transcript_path` は**親セッション側**の transcript で、サブエージェント自身の transcript は別フィールド `agent_transcript_path`。再入フラグの実名は `stop_hook_active`。他に `agent_id` / `agent_type` / `session_id` / `cwd` / `hook_event_name` / `last_assistant_message` / `background_tasks` / `session_crons` を確認。実機確認として、SendMessage を使わず終了しようとする subagent が報告ゲート hook にブロックされ、Stop hook feedback を受けて SendMessage 送信後に終了するフローを実測
 - `claude -p --output-format stream-json` は `--verbose` を伴わないとエラーで即終了する（2026-07-19 実測）。tool_use は `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":...}}]}}` の形、最終結果は末尾の `{"type":"result","result":"<テキスト>",...}` イベントに入る

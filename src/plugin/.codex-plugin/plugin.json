@@ -1,12 +1,12 @@
 {
   "name": "dev-method",
   "displayName": "Dev Method",
-  "description": "個人開発手法プラグイン — direction 計画駆動・クロスモデルレビュー・チーム実装を、どのプロジェクトでも共有リポジトリを汚さずに回す",
+  "description": "個人開発手法プラグイン — direction 計画駆動・クロスモデルレビュー・実装工程を、どのプロジェクトでも共有リポジトリを汚さずに回す",
   "version": "0.1.64",
   "interface": {
     "displayName": "Dev Method",
     "developerName": "mizulba",
     "shortDescription": "direction 計画駆動・クロスモデルレビューの個人開発手法",
-    "longDescription": "個人開発手法プラグイン — direction 計画駆動・クロスモデルレビュー・チーム実装を、どのプロジェクトでも共有リポジトリを汚さずに回す"
+    "longDescription": "個人開発手法プラグイン — direction 計画駆動・クロスモデルレビュー・実装工程を、どのプロジェクトでも共有リポジトリを汚さずに回す"
   }
 }

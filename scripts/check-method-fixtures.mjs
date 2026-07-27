@@ -800,12 +800,12 @@ function ledgerFixtures() {
 }
 
 function reviewRuntimeStaticFixtures() {
-  const claude = readFileSync(join(repoRoot, 'src/plugin-claude/skills/team-impl/SKILL.md'), 'utf8');
-  const codex = readFileSync(join(repoRoot, 'src/plugin-codex/skills/team-impl/SKILL.md'), 'utf8');
+  const claude = readFileSync(join(repoRoot, 'src/plugin-claude/skills/execution/SKILL.md'), 'utf8');
+  const codex = readFileSync(join(repoRoot, 'src/plugin-codex/skills/execution/SKILL.md'), 'utf8');
   const cross = readFileSync(join(repoRoot, 'src/plugin/skills/cross-review/SKILL.md'), 'utf8');
   const direction = readFileSync(join(repoRoot, 'src/plugin/skills/direction/SKILL.md'), 'utf8');
   const implementerClaude = readFileSync(join(repoRoot, 'src/plugin-claude/agents/implementer.md'), 'utf8');
-  const implementerCodex = readFileSync(join(repoRoot, 'src/plugin-codex/skills/team-impl/implementer.toml'), 'utf8');
+  const implementerCodex = readFileSync(join(repoRoot, 'src/plugin-codex/skills/execution/dev-method-implementer.toml'), 'utf8');
   const validator = (text) => text.includes('verify --review-dir') && text.includes('reviewer の spawn') && text.includes('source checker') && text.includes('単独起動する cross-review');
   assertion('rv01-claude-gate', validator(claude)); assertion('rv01-codex-gate', validator(codex));
   assertion('rv01-ask-gate-drift', !validator(claude.replace('verify --review-dir', 'verify-disabled')));

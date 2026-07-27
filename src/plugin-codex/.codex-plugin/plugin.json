@@ -1,6 +1,6 @@
 {
   "name": "dev-method-codex",
-  "description": "dev-method の Codex 専用部分 — multi_agent サブエージェントによるチーム実装（team-impl）と終了通知 hook。共通スキルは dev-method 本体に。Claude Code にはインストール不要",
+  "description": "dev-method の Codex 専用部分 — multi_agent サブエージェントへ委譲する実装工程（execution）と終了通知 hook。共通スキルは dev-method 本体に。Claude Code にはインストール不要",
   "version": "0.1.64",
   "author": {
     "name": "mizulba"
@@ -8,13 +8,13 @@
   "interface": {
     "displayName": "Dev Method (Codex)",
     "developerName": "mizulba",
-    "shortDescription": "Codex サブエージェントによるチーム実装と終了通知",
-    "longDescription": "dev-method の Codex 専用部分 — multi_agent サブエージェントによるチーム実装と SubagentStop hook による終了通知。Claude Code にはインストール不要",
+    "shortDescription": "Codex サブエージェントへ委譲する実装工程と終了通知",
+    "longDescription": "dev-method の Codex 専用部分 — multi_agent サブエージェントへ委譲する実装工程と SubagentStop hook による終了通知。Claude Code にはインストール不要",
     "category": "Developer Tools",
     "capabilities": [
       "Skills",
       "Hooks"
     ],
-    "defaultPrompt": "team-impl を使って、合意済みの実装計画を Codex サブエージェントで実装してください"
+    "defaultPrompt": "execution を使って、合意済みの実装計画を Codex サブエージェントで実装してください"
   }
 }

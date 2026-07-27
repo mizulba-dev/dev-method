@@ -4,9 +4,9 @@
 
 ## 構成の要点
 
-- 1リポジトリ・3プラグイン: `src/plugin`（共通: direction / cross-review / playwright-cli）、`src/plugin-claude`（team-impl + 通常/高リスク implementer agents）、`src/plugin-codex`（team-impl + implementer*.toml + SubagentStop 終了通知 hook）。
+- 1リポジトリ・3プラグイン: `src/plugin`（共通: direction / cross-review / playwright-cli）、`src/plugin-claude`（execution + implementer / implementer-critical / reviewer agents）、`src/plugin-codex`（execution + dev-method-*.toml + SubagentStop 終了通知 hook）。
 - 各プラグインは `.claude-plugin/plugin.json` と `.codex-plugin/plugin.json` の dual manifest。version は `npm version patch` で全6マニフェストに自動同期される（`scripts/sync-plugin-version.mjs`）。
-- Codex のエージェント定義（implementer*.toml）はプラグインで配布できないため、Codex 版 team-impl スキルが初回実行時と定義更新時に `~/.codex/agents/` へコピーする方式。
+- Codex のエージェント定義（dev-method-*.toml）はプラグインで配布できないため、Codex 版 execution スキルが初回実行時と定義更新時に `~/.codex/agents/` へコピーする方式。
 
 ## release プロファイル（plugin-release スキル用）
 
@@ -25,7 +25,7 @@
 - 応答・コミットメッセージともに常に日本語。
 - スキル変更を手元の CLI に反映するときは `plugin-release` スキルを使う（リリース〜両 CLI 更新まで一気通貫）。
 - スキル本文は配布物。このリポジトリ固有の事情（パス・リモート等）はスキルに書かず、CLAUDE.md / README に書く。
-- Claude 版と Codex 版の team-impl は運用ルールを揃える。片方だけ直すと手法が分岐するので、変更時は両方を確認する。
+- Claude 版と Codex 版の execution は運用ルールを揃える。片方だけ直すと手法が分岐するので、変更時は両方を確認する。
 - `scenario-kit` スキル本文の正本は scenario-kit リポジトリ `src/templates/SKILL.md`。更新時は全文コピー→末尾の dev-method 固有節（使い分けと転用）を再適用する。
 - `DEV_FLOW.md` は手法全体の俯瞰ドキュメント（正本はスキル本文）。レーン・工程・モデル割当を変えるスキル改訂では、同じコミットで DEV_FLOW.md も追従させる。
 

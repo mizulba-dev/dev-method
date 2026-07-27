@@ -1,5 +1,5 @@
 ---
-name: implementer-high
+name: implementer-critical
 description: 高リスク境界の実装を担当する Claude teammate。DB migration・並行処理・認可・セキュリティ・境界横断変更を実装・検証する。コミットはしない
 model: opus
 effort: high

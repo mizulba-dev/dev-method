@@ -1,6 +1,6 @@
 ---
 name: cross-review
-description: 未コミット diff を実行中のクライアントとは別のモデル CLI にレビューさせるクロスモデルレビュー。実装完了時のセカンドオピニオンや team-impl のレビュー工程で使う
+description: 未コミット diff を実行中のクライアントとは別のモデル CLI にレビューさせるクロスモデルレビュー。実装完了時のセカンドオピニオンや execution のレビュー工程で使う
 argument-hint: <対象リポジトリの絶対パス> [計画ファイルのパス] [重点観点]
 ---
 
@@ -17,11 +17,11 @@ provider の起動は初回を含め最大2試行とする。`400 model not supp
 
 レビュアーはレビューだけを行い、コードは修正しない（codex は read-only sandbox で強制。claude は allowedTools がグローバル settings の許可ルールと合成されるため強制は不完全で、プロンプトの明文化と手順4のログ機械判定で担保する）。レビュアーを teammate として挟まず、リーダーが直接 CLI を起動する2層構成。
 
-呼び出し元（team-impl 等）が同ファミリー最上位モデルによるプレレビューも行う場合は、同じ diff 指紋へ両レビューを並列起動する共同ラウンドとして扱う。cross-review 自体は異ベンダーによる diff レビュー結果を1件返すところまでを責務とし、共同ラウンド中は単独で修正・再レビューのループを進めない。両結果の待機・照合・統合・再起動は呼び出し元のスキルを正本とする。
+呼び出し元（execution 等）が同ファミリー最上位モデルによるプレレビューも行う場合は、同じ diff 指紋へ両レビューを並列起動する共同ラウンドとして扱う。cross-review 自体は異ベンダーによる diff レビュー結果を1件返すところまでを責務とし、共同ラウンド中は単独で修正・再レビューのループを進めない。両結果の待機・照合・統合・再起動は呼び出し元のスキルを正本とする。
 
-team-impl から Seal の共同レビューとして呼ばれる場合だけ、呼び出し元から canonical review-dir、`tooling-manifest.json` の絶対パスと内容 SHA-256、`review_unit_id`、固定 checker の verify を通過した全境界manifestの絶対パスと内容 SHA-256、review-required 一覧、direction 本文 SHA-256、開始時 diff 指紋を受け取る。これらを Seal 作業単位入力と呼ぶ。cross-review は受け取った絶対パスを使い、tooling をコピー・再生成せず、`review_unit_id` を作り直さず、兄弟プラグインやキャッシュ位置を推測しない。Seal 作業単位入力が欠けるか呼び出し元の起動前 checker 結果と一致しない場合は CLI を起動せず fail-closed で返す。
+execution から Seal の共同レビューとして呼ばれる場合だけ、呼び出し元から canonical review-dir、`tooling-manifest.json` の絶対パスと内容 SHA-256、`review_unit_id`、固定 checker の verify を通過した全境界manifestの絶対パスと内容 SHA-256、review-required 一覧、direction 本文 SHA-256、開始時 diff 指紋を受け取る。これらを Seal 作業単位入力と呼ぶ。cross-review は受け取った絶対パスを使い、tooling をコピー・再生成せず、`review_unit_id` を作り直さず、兄弟プラグインやキャッシュ位置を推測しない。Seal 作業単位入力が欠けるか呼び出し元の起動前 checker 結果と一致しない場合は CLI を起動せず fail-closed で返す。
 
-team-impl から Sign の共同レビューとして呼ばれる場合は、pre + cross を各1回だけ起動する軽量経路とする。Sign 作業単位入力（canonical review-dir / tooling manifest / review_unit_id / 全境界manifest）は要求せず、対象 diff・計画・重点観点・検証証跡だけで起動する。手順4のログ機械判定（read-only 監査）は Seal と同じく維持し、収束ループ・Evidence Package・ledger 連携は行わない（1回で返す）。
+execution から Sign の共同レビューとして呼ばれる場合は、pre + cross を各1回だけ起動する軽量経路とする。Sign 作業単位入力（canonical review-dir / tooling manifest / review_unit_id / 全境界manifest）は要求せず、対象 diff・計画・重点観点・検証証跡だけで起動する。手順4のログ機械判定（read-only 監査）は Seal と同じく維持し、収束ループ・Evidence Package・ledger 連携は行わない（1回で返す）。
 
 単独のセカンドオピニオンとして起動された場合は standalone とする。standalone では Seal 作業単位入力を要求せず、従来どおり対象 diff・任意の計画・重点観点・検証証跡だけで起動する。Seal 専用ゲートを standalone へ類推適用しない。
 
@@ -47,7 +47,7 @@ team-impl から Sign の共同レビューとして呼ばれる場合は、pre 
    - **diff 指紋の照合**: 結果 JSON の `diff_fingerprint` が手順2の開始時 diff 指紋と同じことを確認し、さらに結果受領時に同じ固定 helper を再実行して現行 diff 指紋が開始時と同じことを確認する。Seal では結果受領イベントの `review_unit_id`・direction 本文 SHA-256・tooling manifest と全境界manifestの絶対パス・内容 SHA-256 も起動時入力と照合する。Seal で返却値・現行値・作業単位入力のいずれかが不一致なら、その結果を承認にも指摘処理にも使わず、帳簿異常として呼び出し元へ返す。standalone の指紋不一致は従来どおり変更者・変更理由を確認し、現行差分から新しい開始時指紋を固定して再ラウンドする
    - **採否の裁定**: 指摘の採否・棄却に迷う場合、Claude Code 上でセッションに advisor が設定されていれば advisor に相談してから決める。相談してもなお偽陽性と示せない指摘は棄却せず must-fix / should-fix のまま残す（fail-closed。不確実性は棄却の根拠にしない）
    - **完了待機の方法**: 完了確認は実行環境の完了通知かブロッキング待機を必須とし、短間隔（秒単位）の手動ポーリングを繰り返さない。どちらも使えない環境でのみ手動確認とし、初回確認は diff 規模から見積もった実行時間（数分〜十数分）の経過後、以後も数分間隔を守る。60秒未満の poll を繰り返した場合は逸脱として実測フッターに記録する
-5. standalone 実行では、開始時／返却値／結果受領時の3点が同じ diff 指紋であることを前提に、**must-fix / should-fix がゼロになるまでレビューを繰り返す**。team-impl の共同ラウンドではここで単独ループせず、指紋照合済みの結果を呼び出し元へ返して両レビューの統合を待つ。standalone の順序は以下:
+5. standalone 実行では、開始時／返却値／結果受領時の3点が同じ diff 指紋であることを前提に、**must-fix / should-fix がゼロになるまでレビューを繰り返す**。execution の共同ラウンドではここで単独ループせず、指紋照合済みの結果を呼び出し元へ返して両レビューの統合を待つ。standalone の順序は以下:
    - **終了判定**: 終了判定は結果 JSON の findings に must-fix / should-fix が無いことの機械判定で行う（収束が続く限りラウンド数自体に上限は設けない。非収束時の打ち切りは下記の停止条件が正本）。verdict が needs-attention なのに must-fix / should-fix がゼロの場合は fail-closed とし、summary を確認して再ラウンドする
    - **nit の扱い**: nit はループの終了条件にせず、各ラウンドで検出された nit は修正を求めず蓄積して、ループ終了時に最終報告へ一括で列挙する（採否は完了後にユーザーが判断する。数行で直せる nit をリーダーがその場で直すことは妨げないが、nit のためだけに追加ラウンドを起動しない）
    - **差分限定再レビュー**: must-fix / should-fix を修正したら再レビューを起動する

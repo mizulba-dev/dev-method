@@ -1,4 +1,5 @@
-name = "reviewer"
+# dev-method managed agent definition — このファイルは dev-method の execution スキルが同期する
+name = "dev-method-reviewer"
 description = "実装完了後の未コミットdiffをレビューするサブエージェント（同ファミリー最上位モデルによるプレレビュー）。コードは修正せず指摘のみ行う"
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"

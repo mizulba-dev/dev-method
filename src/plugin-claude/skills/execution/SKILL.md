@@ -1,16 +1,16 @@
 ---
-name: team-impl
-description: 計画ファイルを入力に Claude implementer teammate + クロスモデルレビューで実装を回す。設計済みタスクの実装フェーズで使う（Claude Code 専用）
+name: execution
+description: 計画ファイルを入力に、実装を Claude implementer teammate へ委譲し、レビュー・裁定・コミットまで回す実装工程。設計済みタスクの実装フェーズで使う（Claude Code 専用）
 argument-hint: <計画ファイルのパス> [タスクディレクトリ]
 ---
 
-# team-impl: Claude 実装 + クロスモデルレビューのチーム実装
+# execution: 計画から出荷までの実装工程（Claude teammate + クロスモデルレビュー）
 
 **Claude Code 専用**（dev-method-claude プラグインで配布。Codex には同名スキルの Codex 最適化版が dev-method-codex にある）。
 
 $ARGUMENTS の1つ目が計画ファイル（通常 direction 置き場の `*.md`）、2つ目が任意のタスクディレクトリ（省略時はカレント checkout で作業。worktree でも可）。
 
-実装は通常境界を `implementer`（Sonnet / medium）、高リスク境界を `implementer-high`（Opus / high）が teammate として直接行い、レビューは `cross-review` スキル（GPT-5.6 Sol / high・リーダー直叩き）で行う。実装・レビューとも中間ラッパー層を挟まない。
+実装は通常境界を `implementer`（Sonnet / medium）、高リスク境界を `implementer-critical`（Opus / high）が teammate として直接行い、レビューは `cross-review` スキル（GPT-5.6 Sol / high・リーダー直叩き）で行う。実装・レビューとも中間ラッパー層を挟まない。
 
 ## 並列境界の解決
 
@@ -61,7 +61,7 @@ R1 を含む各共同ラウンドの起動直前に、`tooling-manifest.json` �
 
 verify が exit 0 のときだけ、verify JSON の全境界manifest絶対パスと内容 SHA-256、`review_unit_id`、direction 本文 SHA-256、現行 diff 指紋、およびmanifestから抽出したreview-required一覧をそのラウンドの固定入力にする。tooling manifest の絶対パス・内容 SHA-256も含め、プレレビューと cross-review の両方へ同じ値を渡す。Evidence Package は探索索引であって免責範囲ではないため、両者に diff 全体と必要な周辺コードを読み、契約漏れ・証拠の識別力・観測点の迂回・未モデル化リスクを確認させる。package 記載外を確認不要とは指示しない。
 
-このゲートは team-impl が Seal の共同レビューとして呼ぶ経路だけに適用する。Show のプレレビューと、セカンドオピニオンとして単独起動する cross-review に Seal 専用の tooling manifest / Evidence Package を要求しない。
+このゲートは execution が Seal の共同レビューとして呼ぶ経路だけに適用する。Show のプレレビューと、セカンドオピニオンとして単独起動する cross-review に Seal 専用の tooling manifest / Evidence Package を要求しない。
 
 provider の起動は初回を含め最大2試行とする。`400 model not supported` のときだけ同じ外部 CLI でモデル指定を外す既存経路へ進み、429・5xx・quota・unavailable のときだけ起動環境が列挙できる同じ外部モデルファミリーの別の利用可能な最上位モデルへ切り替える。これらは排他的に扱い、同じ失敗条件を反復しない。救出結果から全必須fieldを持つ正規化JSONを作り、schema・verdict/findings整合・diff指紋を検証できた場合だけproviderを再実行せず、それ未満は試行失敗として扱う。2試行目も失敗した、または適格な代替がない場合は fail-closed で停止する。ユーザーが単独レビューの継続を明示許可した場合だけ標準 code ledger を実行せず、承認発言・省略対象・理由を逸脱記録と非canonical footerへ残してパーサ警告を維持する。この縮退は作業継続を妨げないが、同一版二者承認・ledger eligible・dogfood適格を満たしたとは記録しない。
 
@@ -77,7 +77,7 @@ code ledger では各返却の `approve` を must-fix / should-fix ゼロ、`nee
 
 共同ラウンドは、先に `cross-review` の手順1〜2だけを実行して作業ディレクトリ・helper・開始時 diff 指紋を準備し、次に reviewer を spawn し、その起動後に完了を待たず `cross-review` の手順3以降を開始する。契約追補がある場合は、その配布と担当の反映完了確認を開始時 diff 指紋の固定より前に終え、指紋固定からレビュー起動までの間に diff を変える指示を出さない（追補反映で指紋が失効するとラウンド1回分の起動を浪費する）。
 
-同じ開始時指紋に対して、`reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model fable / effort high、`tools` で read-only 制限済み）をバックグラウンド spawn し、その完了を待つ前に `cross-review` をバックグラウンド起動する。reviewer は implementer / implementer-high とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる。
+同じ開始時指紋に対して、`reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model fable / effort high、`tools` で read-only 制限済み）をバックグラウンド spawn し、その完了を待つ前に `cross-review` をバックグラウンド起動する。reviewer は implementer / implementer-critical とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる。
 
 両レビューには同じ開始時 diff 指紋・計画ファイル・対象範囲・implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）・重点観点を渡す。Seal ではさらに、起動前ゲートで固定した tooling manifest と全境界manifestの絶対パス・内容 SHA-256、`review_unit_id`、review-required 一覧、direction 本文 SHA-256 も同一値で渡す。spawn prompt の基本観点は `cross-review` の `references/review-prompt.md` の観点ブロックと揃え、確信度の高い指摘のみを重大度順で求める。reviewer はテストを実行しない静的レビュー専任で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。reviewer の最終報告には開始時 diff 指紋を64桁小文字16進でそのまま返させる。
 
@@ -97,7 +97,7 @@ nit はループの終了条件にせず、各ラウンドで検出された nit
 
 ## 報告様式
 
-リーダーの報告・帳簿づけはチーム実装の生成コストの主要部分（実測で実働の3〜4割）。判断に使われない詳細は報告に書かず、direction・コミット・差し戻しメッセージに残す:
+リーダーの報告・帳簿づけはこの工程の生成コストの主要部分（実測で実働の3〜4割）。判断に使われない詳細は報告に書かず、direction・コミット・差し戻しメッセージに残す:
 
 - **中間報告は差分のみ**: 直前の報告から変わった事実だけを数行で書き、既報や全体状況の再掲をしない。状態が変わらない通知（implementer の待機通知・レビュー進行の生存確認）への応答は1行でよい
 - **指摘の本文は差し戻しメッセージにだけ書く**: ユーザー向け報告は件数・重大度・処理先（差し戻し/直修正/棄却）のみ。同じ指摘を報告と差し戻しの両方に書かない
@@ -106,7 +106,7 @@ nit はループの終了条件にせず、各ラウンドで検出された nit
 ## 手順
 
 1. 計画ファイルを読み、**並列境界別実装ブリーフ**（契約=確定値／変更マップ=触るファイルと模倣パターンの名指し／完了条件とやらないこと）が揃っているか確認する。欠けている境界があれば `direction` スキルの基準で計画側を補完してから着手する
-2. 実装タスクに分割して共有タスクリスト（TaskCreate）に登録し、担当プロファイルを決める。DB migration・並行処理・認可・セキュリティ・境界間契約を高リスク基準とする。高リスク role は、高リスク基準に触れる契約・ファイル・完了条件を最小の高リスク編集面へ分けて局所割り当てし、基準に触れない編集面は `implementer` へ割り当てる。その理由だけで同じリポジトリ境界の通常変更へ伝播させない。通常ブリーフと編集面が独立なら worktree で並列にし、同一ファイルまたは同一不変条件へ不可分に混在するときだけブリーフ全体を `implementer-high` とする。単に変更量が多いだけでは high に上げない
+2. 実装タスクに分割して共有タスクリスト（TaskCreate）に登録し、担当プロファイルを決める。DB migration・並行処理・認可・セキュリティ・境界間契約を高リスク基準とする。高リスク role は、高リスク基準に触れる契約・ファイル・完了条件を最小の高リスク編集面へ分けて局所割り当てし、基準に触れない編集面は `implementer` へ割り当てる。その理由だけで同じリポジトリ境界の通常変更へ伝播させない。通常ブリーフと編集面が独立なら worktree で並列にし、同一ファイルまたは同一不変条件へ不可分に混在するときだけブリーフ全体を `implementer-critical` とする。単に変更量が多いだけでは high に上げない
 3. 決定した agent type の teammate を spawn する。ブリーフが揃っていれば**並列境界単位で最初から並列 spawn** する。spawn prompt には計画ファイルの絶対パス・対象リポジトリ（境界）・担当タスク一覧・完了条件を必ず含める（teammate はこの会話の履歴を引き継がない）。終了前に最終報告を SendMessage でリーダーへ明示送信することも指示する。大きなフェーズは「追加系→削除系」のように**中間状態でもテストが通る単位**に分けて順に渡す
 4. 実装中に仕様追補が出たら、**境界間の契約を壊すもの（契約バグ）だけ即時に implementer へ反映**する。それ以外は direction に追補として記録し、実装完了後にフォローアップ1バッチでまとめて回す（実装中の都度反映は手戻りが最も高くつく）
 5. worktree分離時は全境界の完了報告を待ち、境界checkpointを統合先へ取り込んでEvidenceを正式生成・verifyした後、統合先の全diffへ**共同レビュー**を1回起動する。独立git repository境界だけは、他境界の実装と並行して境界単位にレビューしてよい。direction に追補があれば追補箇所を**重点観点として必ず渡す**。ブリーフに無い検証観点を思いついたときも、リーダーが自分で検証せず重点観点に足す

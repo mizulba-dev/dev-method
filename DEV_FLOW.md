@@ -1,8 +1,8 @@
 # 個人開発手法の全体像 — レーン制と direction 駆動フロー
 
-爆発半径でレビュー工程の重さを決める4レーン（Ship / Show / Sign / Seal）を軸に、計画ドキュメント（direction）・チーム実装（team-impl）・クロスモデルレビュー・実測（method-check）・摩擦ログの改善ループが噛み合う構造をまとめる。
+爆発半径でレビュー工程の重さを決める4レーン（Ship / Show / Sign / Seal）を軸に、計画ドキュメント（direction）・実装工程（execution）・クロスモデルレビュー・実測（method-check）・摩擦ログの改善ループが噛み合う構造をまとめる。
 
-正本は各スキル本文（`direction` / `team-impl` / `cross-review` / `method-check`）。本書は俯瞰用のまとめであり、記述が食い違う場合はスキル本文が優先する。スキル改訂時はこのドキュメントも同じコミットで追従させる。
+正本は各スキル本文（`direction` / `execution` / `cross-review` / `method-check`）。本書は俯瞰用のまとめであり、記述が食い違う場合はスキル本文が優先する。スキル改訂時はこのドキュメントも同じコミットで追従させる。
 
 ## 1. 全体マップ
 
@@ -63,7 +63,7 @@ flowchart TD
 | **Ship** | 挙動に触れない変更 | 機械ゲート（lint / build / 該当テスト）のみ | レビュー全部 |
 | **Show** | 下位2レーンに触れないすべて（デフォルト） | 実装 → 機械ゲート（UI変更なら scenario-kit smoke 実走）→ プレレビュー**1回** → must-fix のみ即対応 → 出荷。should-fix / nit は follow-up 1バッチ | cross-review・反復レビュー |
 | **Sign** | 高リスク基準／検知器の新設・変更 | 実装 → 機械ゲート（検知器は実データ×不変式ハーネス）→ pre + cross を同一 diff 指紋へ**各1回** → 統合裁定 → must-fix 1バッチ修正 → 機械ゲート green で出荷（**再レビューなし**） | Evidence Package・ledger・収束ループ |
-| **Seal** | **不可逆 × 外部影響が重なる**変更のみ | direction 起草 → 合意前計画レビュー → 合意 → team-impl → 共同レビューを二者承認まで収束 → 最終 smoke → 完了記載 | —（フルパイプ） |
+| **Seal** | **不可逆 × 外部影響が重なる**変更のみ | direction 起草 → 合意前計画レビュー → 合意 → execution → 共同レビューを二者承認まで収束 → 最終 smoke → 完了記載 | —（フルパイプ） |
 
 > Show は原義（Ship/Show/Ask の「マージ後の事後レビュー」）と異なり、ここでは「出荷前の1回レビュー」を指す再定義。検知器（テスト基盤・検証スクリプト・パーサ・品質ゲート）の新設・変更は規模によらず Sign 以上 — 検知器自身の false green は静的レビューで見抜きにくいため、実データ×不変式の機械的敵対者と異ベンダーの独立実行検証を必須にしている。
 
@@ -114,7 +114,7 @@ flowchart TD
   D2 --> D3["並列境界別の実装ブリーフ<br/>Evidence Contract・契約・変更マップ・<br/>検証oracle・横断関心5点・やらないこと"]
   D3 --> D4["合意前計画レビュー（外部モデル・read-only）<br/>must / should / nit 全区分ゼロまで反復<br/>plan ledger で帳簿検証"]
   D4 --> D5{"ユーザー合意"}
-  D5 --> I1["team-impl 起動<br/>並列境界ごとに implementer を spawn<br/>（worktree 分離・依存インストール）"]
+  D5 --> I1["execution 起動<br/>並列境界ごとに implementer を spawn<br/>（worktree 分離・依存インストール）"]
   I1 --> I2["implementer が実装＋検証実行<br/>（検証はimplementerの1回が正）"]
   I2 --> I3["起動前ゲート<br/>Evidence Package verify（固定checker・fail-closed）"]
   I3 --> R1["共同レビュー Rn — 同一 diff 指紋へ並列"]
@@ -142,12 +142,12 @@ flowchart TD
 
 ## 5. 登場コンポーネントとモデル割当
 
-1リポジトリから3プラグインを配布する。共通スキルは Claude Code / Codex 両方、team-impl は各クライアント最適化版が1つずつ入る。
+1リポジトリから3プラグインを配布する。共通スキルは Claude Code / Codex 両方、execution は各クライアント最適化版が1つずつ入る。
 
 | コンポーネント | 役割 |
 | --- | --- |
 | `direction` | 実装計画のライフサイクル管理とレーン判定の正本 |
-| `team-impl` | 計画ファイル駆動のチーム実装（リーダーは分割・検証・レビュー起動・コミットに徹し、実装は teammate に任せる） |
+| `execution` | 計画ファイル駆動の実装工程（リーダーは分割・検証・レビュー起動・コミットに徹し、実装は teammate に任せる） |
 | `cross-review` | 実行中クライアントと別ベンダーのモデル CLI に diff をレビューさせる。SHA-256 diff 指紋で同一性を担保し、ログ機械判定で read-only を監査 |
 | `method-check` | セッションログから時間内訳を決定論的に実測（固定スクリプト）。問題は friction ログへ |
 | `scenario-kit` | 1シナリオを demo 動画 / スクリーンショット / smoke 検証の3用途に使い回す |
@@ -161,7 +161,7 @@ flowchart TD
 | 役割 | Claude 版 | Codex 版 |
 | --- | --- | --- |
 | implementer（通常境界） | Sonnet / medium | GPT-5.6 Terra / medium |
-| implementer-high（高リスク境界） | Opus / high | GPT-5.6 Sol / high |
+| implementer-critical（高リスク境界） | Opus / high | GPT-5.6 Sol / high |
 | プレレビュー reviewer | Fable / high | GPT-5.6 Sol / high |
 | cross-review（異ベンダー呼び出し） | → GPT-5.6 Sol / high | → Fable / high |
 
@@ -198,4 +198,4 @@ flowchart LR
 | friction ループ | カイゼン／レトロスペクティブ、SRE の toil 計測 | 逸脱を1行ずつ記録し、閾値到達で手法スキル自体を改訂 → プラグインとして再配布。実測（session-metrics）で裏を取る |
 | friction の発生位置タグ | **graph engineering**（マルチエージェント編成を有向グラフとして設計する語彙。2026年半ば〜） | 手法の工程をノード（計画・実装・レビュー・リーダー・機械ゲート）とエッジ（工程間のハンドオフ）とみなし、摩擦の主因がどちらで起きたかを1タグで記録。エージェント編成そのものは動的グラフ化せず（レーンによる静的トポロジー選択と teammate の短命化を維持）、観測の分類軸としてだけ取り入れた |
 | 機械ゲート | CI quality gates | 全レーン共通の土台。レビューを減らした Sign / Show の「受け皿」として明示的に位置づける |
-| team-impl | リーダー／実装者の分業（multi-agent orchestration） | リーダーは分割・検証・裁定に徹し実装しない。検証実行は implementer の1回を正とし、証跡（コマンド・exit code・件数）で確認して再実行しない |
+| execution | リーダー／実装者の分業（multi-agent orchestration） | リーダーは分割・検証・裁定に徹し実装しない。検証実行は implementer の1回を正とし、証跡（コマンド・exit code・件数）で確認して再実行しない |

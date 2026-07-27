@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { basename } from 'node:path';
 
 const ROLE_MODELS = {
   implementer: { claude: 'sonnet/medium', codex: 'gpt-5.6-terra/medium' },
-  'implementer-high': { claude: 'opus/high', codex: 'gpt-5.6-sol/high' },
+  'implementer-critical': { claude: 'opus/high', codex: 'gpt-5.6-sol/high' },
   reviewer: { claude: 'fable/high', codex: 'gpt-5.6-sol/high' },
   'cross-review': { fromCodex: 'fable/high', fromClaude: 'gpt-5.6-sol/high' },
 };
@@ -32,8 +33,8 @@ const CHECKS = [
     effortRegex: /^effort:\s*(\S+)/,
   },
   {
-    file: 'src/plugin-claude/agents/implementer-high.md',
-    role: 'implementer-high',
+    file: 'src/plugin-claude/agents/implementer-critical.md',
+    role: 'implementer-critical',
     variant: 'claude',
     modelRegex: /^model:\s*(\S+)/,
     effortRegex: /^effort:\s*(\S+)/,
@@ -46,21 +47,21 @@ const CHECKS = [
     effortRegex: /^effort:\s*(\S+)/,
   },
   {
-    file: 'src/plugin-codex/skills/team-impl/implementer.toml',
+    file: 'src/plugin-codex/skills/execution/dev-method-implementer.toml',
     role: 'implementer',
     variant: 'codex',
     modelRegex: /^model\s*=\s*"([^"]+)"/,
     effortRegex: /^model_reasoning_effort\s*=\s*"([^"]+)"/,
   },
   {
-    file: 'src/plugin-codex/skills/team-impl/implementer-high.toml',
-    role: 'implementer-high',
+    file: 'src/plugin-codex/skills/execution/dev-method-implementer-critical.toml',
+    role: 'implementer-critical',
     variant: 'codex',
     modelRegex: /^model\s*=\s*"([^"]+)"/,
     effortRegex: /^model_reasoning_effort\s*=\s*"([^"]+)"/,
   },
   {
-    file: 'src/plugin-codex/skills/team-impl/reviewer.toml',
+    file: 'src/plugin-codex/skills/execution/dev-method-reviewer.toml',
     role: 'reviewer',
     variant: 'codex',
     modelRegex: /^model\s*=\s*"([^"]+)"/,
@@ -70,50 +71,50 @@ const CHECKS = [
 
 const PROSE_CHECKS = [
   {
-    file: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    file: 'src/plugin-claude/skills/execution/SKILL.md',
     role: 'implementer',
     variant: 'claude',
-    regex: /`implementer`(?!-high)（([^）]+)）/,
+    regex: /`implementer`(?!-critical)（([^）]+)）/,
   },
   {
-    file: 'src/plugin-claude/skills/team-impl/SKILL.md',
-    role: 'implementer-high',
+    file: 'src/plugin-claude/skills/execution/SKILL.md',
+    role: 'implementer-critical',
     variant: 'claude',
-    regex: /`implementer-high`（([^）]+)）/,
+    regex: /`implementer-critical`（([^）]+)）/,
   },
   {
-    file: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    file: 'src/plugin-claude/skills/execution/SKILL.md',
     role: 'reviewer',
     variant: 'claude',
     regex: /model\s+(\w+)\s*\/\s*effort\s+(\w+)/,
     twoGroups: true,
   },
   {
-    file: 'src/plugin-claude/skills/team-impl/SKILL.md',
+    file: 'src/plugin-claude/skills/execution/SKILL.md',
     role: 'cross-review',
     variant: 'fromClaude',
     regex: /レビューは `cross-review` スキル（([^・]+)・/,
   },
   {
-    file: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    file: 'src/plugin-codex/skills/execution/SKILL.md',
     role: 'implementer',
     variant: 'codex',
-    regex: /`implementer`(?!-high)（([^）]+)）/,
+    regex: /`dev-method-implementer`(?!-critical)（([^）]+)）/,
   },
   {
-    file: 'src/plugin-codex/skills/team-impl/SKILL.md',
-    role: 'implementer-high',
+    file: 'src/plugin-codex/skills/execution/SKILL.md',
+    role: 'implementer-critical',
     variant: 'codex',
-    regex: /`implementer-high`（([^）]+)）/,
+    regex: /`dev-method-implementer-critical`（([^）]+)）/,
   },
   {
-    file: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    file: 'src/plugin-codex/skills/execution/SKILL.md',
     role: 'reviewer',
     variant: 'codex',
     regex: /`reviewer` プロファイル（([^）]+)）/,
   },
   {
-    file: 'src/plugin-codex/skills/team-impl/SKILL.md',
+    file: 'src/plugin-codex/skills/execution/SKILL.md',
     role: 'cross-review',
     variant: 'fromCodex',
     regex: /別モデル = Claude\s+([^の]+?)\s*の headless/,
@@ -148,16 +149,16 @@ const PROSE_CHECKS = [
   },
   {
     file: 'README.md',
-    role: 'implementer-high',
+    role: 'implementer-critical',
     variant: 'claude',
-    regex: /\|\s*implementer-high（高リスク境界）\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/,
+    regex: /\|\s*implementer-critical（高リスク境界）\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/,
     groupIndex: 1,
   },
   {
     file: 'README.md',
-    role: 'implementer-high',
+    role: 'implementer-critical',
     variant: 'codex',
-    regex: /\|\s*implementer-high（高リスク境界）\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/,
+    regex: /\|\s*implementer-critical（高リスク境界）\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/,
     groupIndex: 2,
   },
   {
@@ -190,28 +191,28 @@ const PROSE_CHECKS = [
     file: 'README.md',
     role: 'implementer',
     variant: 'claude',
-    regex: /team-impl`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer agents/,
+    regex: /execution`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer agents/,
     groupIndex: 1,
   },
   {
     file: 'README.md',
-    role: 'implementer-high',
+    role: 'implementer-critical',
     variant: 'claude',
-    regex: /team-impl`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer agents/,
+    regex: /execution`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer agents/,
     groupIndex: 2,
   },
   {
     file: 'README.md',
     role: 'implementer',
     variant: 'codex',
-    regex: /team-impl`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer 定義/,
+    regex: /execution`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer 定義/,
     groupIndex: 1,
   },
   {
     file: 'README.md',
-    role: 'implementer-high',
+    role: 'implementer-critical',
     variant: 'codex',
-    regex: /team-impl`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer 定義/,
+    regex: /execution`（通常\s+([^・]+?)・高リスク\s+([^）]+?)）\+ implementer\/reviewer 定義/,
     groupIndex: 2,
   },
   {
@@ -233,23 +234,23 @@ const PROSE_CHECKS = [
 const ROUTING_CHECKS = [
   {
     description: 'implementer role が agent_type へ伝播する',
-    regex: /通常境界に `agent_type="implementer"`/,
+    regex: /通常境界に `agent_type="dev-method-implementer"`/,
   },
   {
-    description: 'implementer-high role が agent_type へ伝播する',
-    regex: /高リスク境界に `agent_type="implementer-high"` を渡/,
+    description: 'implementer-critical role が agent_type へ伝播する',
+    regex: /高リスク境界に `agent_type="dev-method-implementer-critical"` を渡/,
   },
   {
     description: 'reviewer role が agent_type で選択される',
-    regex: /`agent_type="reviewer"`・`fork_turns="none"` を指定/,
+    regex: /`agent_type="dev-method-reviewer"`・`fork_turns="none"` を指定/,
   },
   {
     description: '実装 role 指定時に fork_turns=none を使う',
-    regex: /高リスク境界に `agent_type="implementer-high"` を渡し、`fork_turns="none"` を指定する/,
+    regex: /高リスク境界に `agent_type="dev-method-implementer-critical"` を渡し、`fork_turns="none"` を指定する/,
   },
   {
     description: 'task_name を role 選択子にしない',
-    regex: /`task_name` は `implementer_1` \/ `implementer_high_1` のような lowercase 英数字と underscore の一意な作業名に限定し、role 選択子として扱わない/,
+    regex: /`task_name` は `implementer_1` \/ `implementer_critical_1` のような lowercase 英数字と underscore の一意な作業名に限定し、role 選択子として扱わない/,
   },
   {
     description: 'reviewer task_name を一意名にして role 選択子にしない',
@@ -288,6 +289,34 @@ function normalizeModelOnly(raw) {
 }
 
 const mismatches = [];
+
+// Codex の role 名は `~/.codex/agents/` というグローバル名前空間へ置かれ、`agent_type` の値そのものになる。
+// name とファイル stem が食い違うと、spawn は unknown role で止まらず残存する同名の旧定義へ解決されうるため、
+// 三者（期待 role 名・TOML の name・ファイル stem）の一致を機械的に固定する。
+const CODEX_AGENT_NAMES = [
+  ['src/plugin-codex/skills/execution/dev-method-implementer.toml', 'dev-method-implementer'],
+  ['src/plugin-codex/skills/execution/dev-method-implementer-critical.toml', 'dev-method-implementer-critical'],
+  ['src/plugin-codex/skills/execution/dev-method-reviewer.toml', 'dev-method-reviewer'],
+];
+
+for (const [file, expectedName] of CODEX_AGENT_NAMES) {
+  const hit = findMatch(loadLines(file), /^name\s*=\s*"([^"]+)"/);
+  if (!hit) {
+    mismatches.push(`${file}: role 名（name = "..."）が見つからない`);
+    continue;
+  }
+  const actualName = hit.match[1];
+  if (actualName !== expectedName) {
+    mismatches.push(`${file}:${hit.line} role 名が "${actualName}" だが期待は "${expectedName}"`);
+  }
+  const stem = basename(file, '.toml');
+  if (actualName !== stem) {
+    mismatches.push(`${file}:${hit.line} role 名 "${actualName}" がファイル stem "${stem}" と一致しない`);
+  }
+  if (!actualName.startsWith('dev-method-')) {
+    mismatches.push(`${file}:${hit.line} role 名 "${actualName}" に dev-method- 接頭辞が無い（グローバル名前空間の衝突源）`);
+  }
+}
 
 for (const check of CHECKS) {
   const lines = loadLines(check.file);
@@ -332,11 +361,11 @@ for (const check of PROSE_CHECKS) {
   }
 }
 
-const codexTeamImpl = readFileSync('src/plugin-codex/skills/team-impl/SKILL.md', 'utf8');
+const codexExecution = readFileSync('src/plugin-codex/skills/execution/SKILL.md', 'utf8');
 for (const check of ROUTING_CHECKS) {
-  if (!check.regex.test(codexTeamImpl)) {
+  if (!check.regex.test(codexExecution)) {
     mismatches.push(
-      `src/plugin-codex/skills/team-impl/SKILL.md: routing契約「${check.description}」が見つからない`,
+      `src/plugin-codex/skills/execution/SKILL.md: routing契約「${check.description}」が見つからない`,
     );
   }
 }

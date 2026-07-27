@@ -17,13 +17,13 @@
       "name": "dev-method-claude",
       "displayName": "Dev Method (Claude Code)",
       "source": "./src/plugin-claude",
-      "description": "Claude Code 専用のチーム実装（team-impl + implementer teammate）。Claude Code のみインストール"
+      "description": "Claude Code 専用の実装工程スキル（execution + implementer teammate）。Claude Code のみインストール"
     },
     {
       "name": "dev-method-codex",
       "displayName": "Dev Method (Codex)",
       "source": "./src/plugin-codex",
-      "description": "Codex 専用のチーム実装（team-impl + implementer サブエージェント）と SubagentStop 終了通知。Codex のみインストール"
+      "description": "Codex 専用の実装工程スキル（execution + implementer サブエージェント）と SubagentStop 終了通知。Codex のみインストール"
     }
   ]
 }

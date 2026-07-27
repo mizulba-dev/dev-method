@@ -6,7 +6,7 @@
   "interface": {
     "displayName": "Dev Method (Claude Code)",
     "developerName": "mizulba",
-    "shortDescription": "Claude Code 専用のチーム実装スキル",
+    "shortDescription": "Claude Code 専用の実装工程スキル",
     "longDescription": "dev-method の Claude Code 専用部分。Codex にはインストール不要（Codex は dev-method-codex を使う）"
   }
 }
