@@ -68,7 +68,8 @@ function loadInputs() {
     .map((name) => ({
       name,
       text: trimFinalEols(readFileSync(join(KNOWN_MANUAL_DIR, name), 'utf8')),
-    }));
+    }))
+    .concat({ name: 'current-asset', text: asset });
   return { version: claudeManifest.version, asset, knownManualBlocks };
 }
 

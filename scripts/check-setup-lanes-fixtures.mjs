@@ -506,7 +506,7 @@ try {
 
   mkdirSync(mutationDir, { recursive: true });
   const mutationCases = [
-    ['ship-criteria', (body) => body.replace('挙動に触れない変更', '小さな変更'), 'Ship判定基準'],
+    ['ship-criteria', (body) => body.replace('挙動に触れない:', '小さな変更:'), 'Ship判定基準'],
     ['show-criteria', (body) => body.replace('下位2レーンの基準に触れないすべて', '通常の変更'), 'Show判定基準'],
     ['sign-criteria', (body) => body.replace('DB migration', 'DB作業'), 'Sign判定基準'],
     ['seal-criteria', (body) => body.replace('外部影響', '影響'), 'Seal判定基準'],
@@ -527,7 +527,7 @@ try {
   }
   const formattingSpecimen = join(mutationDir, 'formatting-equivalent.md');
   writeFileSync(formattingSpecimen, `${asset
-    .replace('挙動に触れない変更', '**挙動に触れない変更**')
+    .replace('挙動に触れない:', '**挙動に触れない**:')
     .replace('DB migration', 'DB   migration')}\n`);
   const formattingResult = spawnSync(process.execPath, [checker, '--lane-asset', formattingSpecimen], {
     cwd: repoRoot,
