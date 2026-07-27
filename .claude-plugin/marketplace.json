@@ -11,7 +11,7 @@
       "name": "dev-method",
       "displayName": "Dev Method",
       "source": "./src/plugin",
-      "description": "個人開発手法の共通スキル（direction / cross-review）。Claude Code / Codex 両対応"
+      "description": "開発手法の共通スキル（direction / cross-review）。Claude Code / Codex 両対応"
     },
     {
       "name": "dev-method-claude",
