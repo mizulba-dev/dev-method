@@ -171,8 +171,8 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-  A["実測フッターの逸脱欄<br/>／ Ship・Show の後日バグ"] --> B["friction.md へ1行記録<br/>（記憶を遡った自己申告はしない）"]
-  B --> C{"未対応5件 or<br/>同型2回？"}
+  A["実測フッターの逸脱欄<br/>／ Ship・Show の後日バグ"] --> B["friction.md へ1行記録<br/>発生位置タグ node:* / edge:* を1つ<br/>（記憶を遡った自己申告はしない）"]
+  B --> C{"未対応5件 or<br/>同型2回？<br/>（同型判定はタグが第一キー）"}
   C -->|"Yes"| D["friction-revise<br/>1バッチで手法スキル改訂"]
   C -->|"No"| B
   D --> E["plugin-release<br/>npm version patch → 全6マニフェスト同期<br/>→ marketplace 経由で両CLI更新"]
@@ -181,7 +181,7 @@ flowchart LR
   class A,B,C,D,E loop
 ```
 
-ポイントは2つ。**実測主義** — 時間内訳は session-metrics の決定論的集計だけを採用し、体感で原因を決めつけない。**1バッチ改訂** — friction を1件ずつ直さず、トリガー到達時にまとめて改訂してリリースコストを抑える。
+ポイントは3つ。**実測主義** — 時間内訳は session-metrics の決定論的集計だけを採用し、体感で原因を決めつけない。**1バッチ改訂** — friction を1件ずつ直さず、トリガー到達時にまとめて改訂してリリースコストを抑える。**発生位置タグ** — 各エントリに主因1箇所のタグ（工程の内側なら `node:*`、工程間の受け渡しなら `edge:*`）を付け、同型判定と改訂対象の選定をタグ単位で行う。工程を跨ぐハンドオフ（完了報告の不達・spawn 時の指示漏れ・境界統合）は自由記述だと同型と気づきにくく、タグがあれば同型2回のトリガーを早く引ける。語彙の正本は `method-check` の friction 記録節。
 
 ## 7. 参考にしている手法・下敷きの概念
 
@@ -196,5 +196,6 @@ flowchart LR
 | Evidence Contract / Evidence Package | **Proof-Carrying Code**（Necula & Lee, 1996–97。成果物が自らの正しさの証拠を携行し、受け手は小さな検査器で確認するだけ）＋ Assurance case / safety case（証拠と主張の索引） | PCC の「証拠携行」発想を形式証明抜きで翻案（direction 2026-07-21-3「Evidence-Carrying Direction」の命名も PCC のエコー）。契約に安定ID（`EC-*`）を付け、oracle・故意ずれ・検証ログ・diff 指紋を束縛した Evidence Package として最終 diff に随伴させ、固定 checker が機械検査する。ただし証明ではなく「証拠索引」であり、レビューの読解責務は免除しない |
 | 二者承認・ledger | Two-person rule / dual control、監査ログ（append-only ledger） | Seal は同一 diff 指紋への pre + cross 二者承認が完了条件。帳簿は固定 checker だけが生成し手書き禁止、fail-closed 設計 |
 | friction ループ | カイゼン／レトロスペクティブ、SRE の toil 計測 | 逸脱を1行ずつ記録し、閾値到達で手法スキル自体を改訂 → プラグインとして再配布。実測（session-metrics）で裏を取る |
+| friction の発生位置タグ | **graph engineering**（マルチエージェント編成を有向グラフとして設計する語彙。2026年半ば〜） | 手法の工程をノード（計画・実装・レビュー・リーダー・機械ゲート）とエッジ（工程間のハンドオフ）とみなし、摩擦の主因がどちらで起きたかを1タグで記録。エージェント編成そのものは動的グラフ化せず（レーンによる静的トポロジー選択と teammate の短命化を維持）、観測の分類軸としてだけ取り入れた |
 | 機械ゲート | CI quality gates | 全レーン共通の土台。レビューを減らした Sign / Show の「受け皿」として明示的に位置づける |
 | team-impl | リーダー／実装者の分業（multi-agent orchestration） | リーダーは分割・検証・裁定に徹し実装しない。検証実行は implementer の1回を正とし、証跡（コマンド・exit code・件数）で確認して再実行しない |
