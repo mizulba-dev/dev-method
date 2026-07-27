@@ -1,58 +1,61 @@
 # dev-method
 
-個人開発手法プラグイン。PaPut ワークスペースで確立した direction 計画駆動の開発手法を、参画プロジェクトを含む全プロジェクトで、共有リポジトリを汚さずに使えるようにする。1リポジトリから3プラグインを配布し、クライアント別に最適化した実装フローを提供する。
+**レビュー工程の重さを「爆発半径」だけで決める、AI コーディング向けの個人開発手法。** Claude Code / Codex のプラグインとして配布する。
 
-手法全体の俯瞰（レーン制のフロー図・参考にした手法の対応表）は [DEV_FLOW.md](DEV_FLOW.md) を参照。
+AI に実装させると実装は速くなるが、代わりにレビューが詰まる。かといって全ての変更に重い儀式をかければ遅く、全部を軽くすれば事故る。この手法は変更を4つのレーン（**Ship / Show / Sign / Seal**）に振り分け、工程の重さをレーンごとに固定する。判定の軸は変更の規模でも計画ドキュメントの有無でもなく、**壊れたときにどこまで波及するか（爆発半径）だけ**にした。
 
-## プラグイン構成
+- 手法全体の俯瞰（フロー図・参考にした手法の対応表）: [DEV_FLOW.md](DEV_FLOW.md)
+- 設計判断の裏付けになった実測ログ: [docs/field-notes.md](docs/field-notes.md)
 
-| プラグイン | 中身 | インストール先 |
-| --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `setup` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` | Claude Code / Codex 両方 |
-| `dev-method-claude` | `execution`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
-| `dev-method-codex` | `execution`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
+> 個人の開発のために作ったものをそのまま公開している。要望への対応やサポートは約束できないが、手法ごと fork して使ってもらって構わない（MIT）。
 
-- `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Sign / Seal）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。**レーンは爆発半径だけで判定・宣言し、direction の有無とは独立**（direction は設計合意の道具）: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（デフォルト）はプレレビュー**1回・must のみ**で `cross-review` 省略、Sign（高リスク・検知器の新設/変更）は pre+cross 各1回・統合裁定・must 1バッチ修正・再レビューなし、Seal（**不可逆×外部影響**が重なる変更のみ）は direction フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
-- `setup` — 実装レーンの常駐トリガーを Claude Code / Codex のグローバル設定へ版付き管理ブロックとして追加・更新・削除する。dry-run と明示承認を挟み、管理外の記述は変更しない
-- `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。追跡済み差分と非 ignore 未追跡を含む SHA-256 指紋を返し、standalone では開始時・返却値・結果受領時の同一性を確認して収束までループする
-- `execution` — 計画ファイルを入力に実装〜レビュー〜コミットまで回す実装工程。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/dev-method-*.toml` を自動セットアップ）。Codex は `spawn_agent` の `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする（`agent_type` field が無い runtime では縮退せず停止して Codex の更新・完全再起動を求める。2026-07-23 に役割本文同梱の縮退経路を撤去）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Sign は pre + cross を各1回だけ起動し、統合裁定して must-fix を1バッチ修正して出荷する（再レビューなし・Evidence/ledger なし）。Show のプレレビュー1回・must のみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
+## 4つのレーン
 
-### Evidence Package
-
-Seal の Evidence Package は、direction で明示した既知契約と、その検証実行・ログ・対象差分を結び付ける**証拠索引**である。レビュー担当はこれを起点に確認を効率化できるが、形式証明でも完全性の保証でもない。二者の独立レビューは引き続き diff 全体と関連コードを読み、Package にモデル化されていないリスクや、証拠自体の妥当性も判断する。
-
-したがって、Package にないコードを確認不要とは扱わず、Package が green であってもレビューの読解責務を免除しない。
-
-- Codex の `SubagentStop` hook — サブエージェント終了時に、親AIの生成を使わず Codex UI / イベントストリームへ role と実行 model を含む終了通知を出す（model 欠損入力では role のみ）。実行中は既存の Active 表示で確認する
-- `method-check` — Claude Code / Codex のセッションログから開発時間内訳・運用摩擦を実測するチェック。固定スクリプト `references/session-metrics.mjs` で時間内訳を決定論的に集計する。direction を書いた作業の完了記載時は必須実行し（レーン非依存。実働欄を実測確定）、それ以外は「時間がかかった」と感じたときの主観トリガーで呼ぶ。スキル手順の穴に該当するロスだけ `~/dev-notes/dev-method/friction.md` へ記録する（改訂への落とし込みは dev-method リポジトリの `friction-revise` ローカルスキル）
-- `playwright-cli` — ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み。upstream 更新時は再コピーで追従）
-- `scenario-kit` — Playwright 録画を軸にした3用途ツール: ブランド付きデモ動画（`run`）、リリースノート・ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`。ランタイム異常検知＋証跡を残す）。1つのシナリオを3用途へ使い回すのが基本形で、接続先が異なる場合だけ `<name>-local.json` 等の変種に分ける
-- `bug-diagnosis` — 手強いバグ・性能劣化の診断ループ。再現ループ構築（工程1）を本体に、最小化・仮説立案・計装・正しいシームでの回帰テスト・掃除チェックリストまでを規律化する
-
-plugin 経由のスキル呼び出しは namespace 付き（例: `/dev-method:direction`）。execution は各クライアントに自分用の1つだけが入るため名前衝突しない。
-
-## モデル割当表
-
-役割ごとに Claude 版・Codex 版で使うモデルを固定する。改廃時はこの表を更新し、`scripts/check-model-map.mjs` の対応する定数も合わせて修正する。
-
-| 役割 | Claude 版 | Codex 版 |
-| --- | --- | --- |
-| implementer（通常境界） | Sonnet/medium | GPT-5.6 Terra/medium |
-| implementer-critical（高リスク境界） | Opus/high | GPT-5.6 Sol/high |
-| プレレビュー reviewer | Fable/high | GPT-5.6 Sol/high |
-
-`cross-review` は実行中のクライアントとは別モデルの CLI を呼ぶ: Codex 上で実行中なら Claude Fable/high を、Claude Code 上で実行中なら Codex の GPT-5.6 Sol/high を呼ぶ。
-
-## プロジェクト側の宣言（任意）
-
-ゼロ設定で動く。例外プロジェクトのみルート CLAUDE.md / CLAUDE.local.md（untracked）、または PaPut のプロジェクト指示（`paput_get_project_context` の instructions。ローカルファイルを増やさずに済む）に宣言する:
-
+```mermaid
+flowchart TD
+  START["変更内容を見る"] --> Q1{"挙動に触れるか？<br/>（typo・docs・コメント・ログ文言・<br/>依存patch・自明な設定値 → No）"}
+  Q1 -->|"No"| SHIP["<b>Ship</b>"]
+  Q1 -->|"Yes"| Q2{"不可逆 × 外部影響が<br/><b>重なる</b>か？<br/>（復旧不能なデータ変更・削除・公開後取消不能）<br/>×（公開API・課金・第三者データ）"}
+  Q2 -->|"Yes"| SEAL["<b>Seal</b>"]
+  Q2 -->|"No"| Q3{"高リスク基準に触れるか？<br/>DB migration・並行処理・認可・<br/>セキュリティ・境界間契約<br/>／または検知器の新設・変更か？"}
+  Q3 -->|"Yes"| SIGN["<b>Sign</b>"]
+  Q3 -->|"No"| SHOW["<b>Show</b>（デフォルト）"]
+  classDef ship fill:#DCEFE6,stroke:#2E7D5B,color:#173D2C
+  classDef show fill:#DEE7F5,stroke:#35558A,color:#1C2E4E
+  classDef sign fill:#F5EAD2,stroke:#A9761C,color:#4E3608
+  classDef seal fill:#F5DCE1,stroke:#A33B4A,color:#521D25
+  class SHIP ship
+  class SHOW show
+  class SIGN sign
+  class SEAL seal
 ```
-direction 置き場: <パス>          # 例: paput は repo 内 docs/direction を維持
-並列境界: <単位の説明>            # 例: モノレポで crm-api / crm-web をディレクトリ単位＋worktree 分離
-```
+
+| レーン | 基準 | 工程 |
+| --- | --- | --- |
+| **Ship** | 挙動に触れない変更 | 機械ゲート（lint / build / 該当テスト）のみ。レビューなし |
+| **Show**（デフォルト） | 下位2レーンに触れないすべて | 実装 → 機械ゲート → プレレビュー**1回**（must-fix のみ即対応、should-fix / nit は follow-up 1バッチ） |
+| **Sign** | 高リスク基準／検知器の新設・変更 | 実装 → 機械ゲート → pre + cross を各1回 → 統合裁定 → must-fix 1バッチ修正 → 出荷（**再レビューなし**） |
+| **Seal** | **不可逆 × 外部影響が重なる**変更のみ | 計画ドキュメント（direction）起草からのフルパイプ。二者承認まで収束 |
+
+迷ったら重い側に倒す。実装中に上位レーンの基準に触れると分かったら、その時点で昇格する。
+
+## 設計の柱
+
+**1. レーンは爆発半径だけで決まる。** 計画ドキュメントを書いたかどうかとは独立させた。計画は設計合意の道具であって、書いたせいで実装工程が重くなるなら誰も書かなくなる。
+
+**2. レビューの片翼はつねに別ベンダー。** Sign 以上では、同ファミリー最上位モデルによるプレレビューと、別ベンダー CLI（Claude ↔ Codex）による `cross-review` を同一 diff の SHA-256 指紋へ並列で当てる。同系統モデルが共有する盲点は同系統では潰せない。
+
+**3. 反復レビューをやめた。** Sign は pre + cross を各1回だけ回して統合裁定し、修正後の再レビューはしない。受け皿は機械ゲートと、下記の摩擦ループに移してある。個人開発でレビューを何周も回すのは、時間あたりの検出効率が落ちる。
+
+**4. 手法自体が改善ループの対象。** 出荷後の逸脱や後日バグは friction ログに1行ずつ落ち、閾値（未対応5件または同型2回）に達したらスキル本文をまとめて改訂し、プラグインとして配布し直す。時間内訳は体感ではなく固定スクリプトによるセッションログの実測（`method-check`）で取る。
+
+**5. 検知器の変更は規模によらず Sign 以上。** テスト基盤・検証スクリプト・パーサ・品質ゲートといった「壊れを検知する側」の false green は静的レビューで見抜きにくい。実データ×不変式のハーネスと、故意にずらした検体の実行検証を必須にしている。
+
+> Show という名前は Ship / Show / Ask（Rouan Wilsenach, martinfowler.com）から借りているが、原義の「マージ後の事後レビュー」ではなく「出荷前の1回レビュー」へ再定義している。下敷きにした手法の一覧は [DEV_FLOW.md](DEV_FLOW.md) の「参考にしている手法・下敷きの概念」を参照。
 
 ## インストール
+
+Claude Code または Codex CLI が必要（両方に入れてもよい。`dev-method-claude` は Claude Code のみ、`dev-method-codex` は Codex のみ）。
 
 ```bash
 # Claude Code
@@ -66,9 +69,17 @@ codex plugin add dev-method@mizulba-dev
 codex plugin add dev-method-codex@mizulba-dev
 ```
 
-## セットアップ: 実装レーンの常駐トリガー
+| プラグイン | 中身 | インストール先 |
+| --- | --- | --- |
+| `dev-method` | 共通スキル: `direction` / `setup` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` | Claude Code / Codex 両方 |
+| `dev-method-claude` | `execution`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
+| `dev-method-codex` | `execution`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
-スキルはロードされて初めて効くため、`direction` を起動しない Ship / Show / Sign にも着手前の判定を効かせるには、共通 plugin の setup スキルを1回実行する:
+スキル呼び出しは namespace 付き（例: `/dev-method:direction`）。`execution` は各クライアントに自分用の1つだけが入るため名前衝突しない。
+
+## セットアップ: レーン判定を常駐させる
+
+スキルはロードされて初めて効くため、`direction` を起動しない日常の変更（Ship / Show / Sign）にも着手前のレーン判定を効かせるには、`setup` スキルを1回実行する:
 
 ```text
 # Claude Code
@@ -78,38 +89,78 @@ codex plugin add dev-method-codex@mizulba-dev
 $dev-method:setup
 ```
 
-setup は実行中のクライアントだけを既定 target とし、`check → dry-run → 対象 path と操作の確認 → 明示承認 → apply` の順で進む。Claude Code は `CLAUDE_CONFIG_DIR/CLAUDE.md`（未設定時 `~/.claude/CLAUDE.md`）、Codex は `CODEX_HOME/AGENTS.md`（未設定時 `~/.codex/AGENTS.md`）が対象。両方へ反映する場合だけ `all` を明示する。
+これはグローバル設定ファイル（Claude Code は `CLAUDE_CONFIG_DIR/CLAUDE.md`、既定 `~/.claude/CLAUDE.md`。Codex は `CODEX_HOME/AGENTS.md`、既定 `~/.codex/AGENTS.md`）へ、版付きの `dev-method:implementation-lanes` 管理ブロックを1個だけ挿入する。実行中のクライアントだけを既定 target とし、`check → dry-run → 対象 path と操作の確認 → 明示承認 → apply` の順で進む。両方へ反映する場合だけ `all` を明示する。
 
-挿入するのは版付きの `dev-method:implementation-lanes` 管理ブロック1個だけで、管理外本文・改行・末尾改行・file mode・symlink は保全する。壊れたマーカー、複数ブロック、編集済み手動節、非 regular file、dangling symlink、1 MiB のサイズ上限超過のいずれかを検出した場合は全 target を変更せず停止する。既存の手動節は、公開済みテンプレートとの完全一致時だけ自動移行する。
+管理外の本文・改行・末尾改行・file mode・symlink は保全する。壊れたマーカー、複数ブロック、編集済みの手動節、非 regular file、dangling symlink、1 MiB のサイズ上限超過のいずれかを検出したら、全 target を変更せず停止する。
 
-常駐ルールの要点は、Ship＝挙動非変更・機械ゲートのみ、Show＝既定・プレレビュー1回、Sign＝高リスクまたは検知器変更・pre/cross各1回、Seal＝不可逆×外部影響が重なる変更・フルパイプ。全文は配布 asset の [global-lane-rules.md](src/plugin/skills/setup/assets/global-lane-rules.md) で実行前に確認できる。
+挿入される全文は配布 asset の [global-lane-rules.md](src/plugin/skills/setup/assets/global-lane-rules.md) で事前に確認できる。プラグイン更新後は setup を再実行すると版差を検出して更新し、解除は `remove` を指定して承認する。
 
-plugin 更新後は setup を再実行すると版差を検出して更新する。解除は setup で `remove` を指定し、対象 path と「管理ブロックだけを除去する」ことを承認する。skill を呼べない環境だけは [同じ配布 asset](src/plugin/skills/setup/assets/global-lane-rules.md) を対象ファイルへ手動で追加する（この手動節は setup が既知テンプレートと完全一致するときだけ後から管理下へ移行する）。
+## 収録スキル
 
-## リリース手順
+| スキル | 用途 |
+| --- | --- |
+| `direction` | 実装計画のライフサイクル管理と、レーン判定の正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置き、参画プロジェクトのリポジトリを汚さない |
+| `execution` | 計画ファイルを入力に、実装 → レビュー → コミットまで回す実装工程。リーダーは分割・検証確認・裁定に徹し、実装は implementer に委譲する。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/dev-method-*.toml` を自動セットアップ） |
+| `cross-review` | 実行中のクライアントとは別ベンダーのモデル CLI（`codex exec` / `claude -p`）に diff をレビューさせる。追跡済み差分と非 ignore 未追跡を含む SHA-256 指紋を返し、両者が同じ版を見たことを機械的に担保する |
+| `setup` | レーン判定の常駐トリガーをグローバル設定へ版付き管理ブロックとして追加・更新・削除する |
+| `method-check` | セッションログから開発時間の内訳と運用摩擦を実測する。固定スクリプトで決定論的に集計し、スキル手順の穴に該当するロスだけ friction ログへ記録する |
+| `bug-diagnosis` | 手強いバグ・性能劣化の診断ループ。再現ループの構築を本体に、最小化・仮説立案・計装・正しいシームでの回帰テスト・掃除まで規律化する |
+| `scenario-kit` | 1つの Playwright シナリオを3用途に使い回す: デモ動画（`run`）、ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`） |
+| `playwright-cli` | ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み） |
+| `plugin-release` | バージョンバンプ → tag push → 配布 → 両 CLI 反映までの一気通貫リリース |
 
-1. 変更をコミット（日本語メッセージ）
+`execution` の運用上の要点として、**検証の実行は implementer の1回を正とし**、リーダーもレビュアーも証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動し、両結果を根本原因単位に統合して、同一版への二者承認まで反復する。
+
+### Evidence Package（Seal のみ）
+
+Seal の Evidence Package は、direction で明示した既知契約と、その検証実行・ログ・対象差分を結び付ける**証拠索引**である。レビュー担当はこれを起点に確認を効率化できるが、形式証明でも完全性の保証でもない。二者の独立レビューは引き続き diff 全体と関連コードを読み、Package にモデル化されていないリスクや、証拠自体の妥当性も判断する。したがって、Package にないコードを確認不要とは扱わず、Package が green であってもレビューの読解責務を免除しない。
+
+## モデル割当
+
+役割ごとに Claude 版・Codex 版で使うモデルを固定する。実装は速いモデル、レビューは各ファミリー最上位、そして高リスク role は高リスク編集面だけに局所割り当てし、同じ境界の通常変更へは伝播させない。
+
+| 役割 | Claude 版 | Codex 版 |
+| --- | --- | --- |
+| implementer（通常境界） | Sonnet/medium | GPT-5.6 Terra/medium |
+| implementer-critical（高リスク境界） | Opus/high | GPT-5.6 Sol/high |
+| プレレビュー reviewer | Fable/high | GPT-5.6 Sol/high |
+
+`cross-review` は実行中のクライアントとは別モデルの CLI を呼ぶ: Codex 上で実行中なら Claude Fable/high を、Claude Code 上で実行中なら Codex の GPT-5.6 Sol/high を呼ぶ。
+
+この表は `scripts/check-model-map.mjs` がスキル本文と突き合わせて検証する。改廃時は表とスクリプトの定数を同時に更新する。
+
+## プロジェクト側の宣言（任意）
+
+ゼロ設定で動く。例外プロジェクトだけ、ルートの `CLAUDE.md` / `CLAUDE.local.md`（untracked）に宣言する:
+
+```
+direction 置き場: <パス>          # 例: repo 内 docs/direction を維持したい場合
+並列境界: <単位の説明>            # 例: モノレポで crm-api / crm-web をディレクトリ単位＋worktree 分離
+```
+
+## 既知の制約
+
+- Codex 版のエージェント定義は plugin では配布できない（Codex の plugin ローダーが `agents/` を無視するため）。`execution` スキルが初回実行時と定義更新時に `~/.codex/agents/` へコピーする方式で回避している
+- Codex 版 reviewer の read-only は、`spawn_agent` に sandbox 相当の指定が無いためプロンプト指示に依存する（Claude 側の `cross-review` は allowedTools + ログ機械監査で担保）
+- Codex 版の interrupt_agent 運用・並列スポーンの安定性は未検証
+
+詳細と実測日は [docs/field-notes.md](docs/field-notes.md) にある。
+
+## メンテナ向け
+
+<details>
+<summary>リリース手順</summary>
+
+1. 変更をコミット
 2. `npm version patch` — version スクリプトが全6 plugin.json を自動同期して同一コミット + tag を作る
 3. `git push origin main --follow-tags`（`git ls-remote --tags origin` で tag 到達を確認）
 4. Claude Code: `claude plugin marketplace update mizulba-dev` → `claude plugin update dev-method@mizulba-dev` と `claude plugin update dev-method-claude@mizulba-dev`（適用は再起動後）
 5. Codex: `codex plugin marketplace upgrade mizulba-dev` → `codex plugin add dev-method@mizulba-dev` と `codex plugin add dev-method-codex@mizulba-dev`（add が更新を兼ねる。適用は完全再起動後）
 
-## 未検証ポイント
+</details>
 
-- Codex 版 execution の interrupt_agent 運用、並列スポーンの安定性、agents 定義の反映タイミング
-- Codex 版 reviewer プロファイルの read-only 強制（spawn_agent に sandbox 相当の指定がなく、プロンプト指示のみに依存。2026-07-16 追加）
+各プラグインは `.claude-plugin/plugin.json` と `.codex-plugin/plugin.json` の dual manifest を持ち、version は `npm version patch` で6マニフェスト全てへ同期される（`scripts/sync-plugin-version.mjs`）。スキル本文が正本で、`DEV_FLOW.md` は俯瞰用のまとめ。記述が食い違う場合はスキル本文が優先する。
 
-## 検証済み
+## ライセンス
 
-- Codex の plugin ローダーは `agents/` ディレクトリを無視する（2026-07 実測。公式 plugin はすべて skills/ + assets/ のみ）。Codex のエージェント定義は plugin では配布できず `~/.codex/agents/*.toml` 固定のため、Codex 版 execution はスキル初回実行時と定義更新時のコピーでセットアップする
-- Codex 上からの `claude -p --allowedTools ...` によるレビュー実行（cross-review の Codex 側分岐。2026-07-09 初回運用で実測、オプション形式の調整後に動作）
-- Codex 版 execution の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 初回運用で実測）
-- Codex 版 execution の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
-- Claude 版 SubagentStop 報告ゲート hook の撤去（2026-07-23）: プラグイン経由の発火が実測で不発（報告なし終了の reviewer が素通り・transcript に hook 痕跡ゼロ。settings.json 直書き probe では発火実績あり）のため、hook 本体・fixture ハーネスごと削除した。teammate の報告不達対策は agents 定義の明示配送条項と催促上限の運用を正本に戻す
-- `agent_type` 前提化（2026-07-23）: ユーザー環境の Codex で `spawn_agent` schema に `agent_type` が常在することを確認し、未対応 runtime 向けの役割本文同梱縮退（モデル配分不成立の記録つき）をスキル・README から撤去した。`agent_type` field 自体が無い場合は縮退せず停止する fail-closed へ変更
-- Codex CLI `0.145.0-alpha.24` の custom role routing（2026-07-20実測）: `agent_type` + `fork_turns="none"` で implementer = GPT-5.6 Terra/medium、implementer-high = GPT-5.6 Sol/high、reviewer = GPT-5.6 Sol/high を選択し、implementer の follow-up でも同じ role / model / effort を維持。**この実測は接頭辞なしの旧 role 名で行ったもので、`dev-method-` 接頭辞付きの現行 role 名での spawn は未実測**（2026-07-28 の改名時点。routing 機構自体は同じだが、新 role 名の可視化には `~/.codex/agents/` の同期と Codex の完全再起動が要る）。これは CLI alpha の確認であり、Codex Desktop / IDE の現セッションへの反映は現在の tool schema で別途判定する
-- Codex セッション JSONL の cwd・正常/中断ターン境界・ツール call/output・MCP 所要時間・累積トークン量の抽出（2026-07-11 実在ログで確認）
-- Claude Code の `SubagentStop` hook 入力 JSON のフィールド実名（2026-07-19 probe hook で実測）: `transcript_path` は**親セッション側**の transcript で、サブエージェント自身の transcript は別フィールド `agent_transcript_path`。再入フラグの実名は `stop_hook_active`。他に `agent_id` / `agent_type` / `session_id` / `cwd` / `hook_event_name` / `last_assistant_message` / `background_tasks` / `session_crons` を確認。実機確認として、SendMessage を使わず終了しようとする subagent が報告ゲート hook にブロックされ、Stop hook feedback を受けて SendMessage 送信後に終了するフローを実測
-- `claude -p --output-format stream-json` は `--verbose` を伴わないとエラーで即終了する（2026-07-19 実測）。tool_use は `{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":...}}]}}` の形、最終結果は末尾の `{"type":"result","result":"<テキスト>",...}` イベントに入る
-- `codex exec --json` の command_execution イベント形式（`{"type":"item.completed","item":{"type":"command_execution","command":"/bin/zsh -lc '<コマンド>'",...}}`）を実測し、`check-review-log.mjs` の逸脱判定はこのシェルラッパーを剥がしてから許可パターンと照合する設計にした（2026-07-19）
-- canary 実測（2026-07-19）: cross-review と同一の `--allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(git log:*)"` 下で `go test` 実行を明示要求するプロンプトを `claude -p --output-format stream-json --verbose` で1回流したところ、許可外の Bash 呼び出し（`go test ./...` を含む複数バリエーション・複合コマンド・許可外 MCP ツール）は計7件すべて `result.permission_denials` として個別拒否された。ただし**単発の拒否で run 全体が abort するわけではない**: モデルはターンを継続し、最終的に `terminal_reason: "completed"` で正常終了して「テストは実行できていない」と正直に報告した（事前調査時点の「run が abort する」という記述は不正確だったと訂正。1回目の試行が見かけ上 abort したのは、こちら側の Bash ツール2分タイムアウトによる強制中断が原因で、allowedTools 機構自体によるものではなかった）。したがって cross-review 手順3のプロンプト側検証禁止条項は canary の結果によらず維持する（allowedTools 単体では「モデルが拒否のたびに別の抜け道を試し続ける」ことを防げないため、明文化との併用が必要）
+MIT
