@@ -8,11 +8,12 @@
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `setup` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `team-impl`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
 | `dev-method-codex` | `team-impl`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
 - `direction` — 実装計画のライフサイクル管理と、実装レーン（Ship / Show / Sign / Seal）の判定正本。計画は `~/dev-notes/<プロジェクト名>/direction/` に置く（git toplevel 名から自動導出。CLAUDE.local.md の `direction 置き場:` で上書き可）。**レーンは爆発半径だけで判定・宣言し、direction の有無とは独立**（direction は設計合意の道具）: Ship（挙動非変更）はレビューなしで機械ゲートのみ、Show（デフォルト）はプレレビュー**1回・must のみ**で `cross-review` 省略、Sign（高リスク・検知器の新設/変更）は pre+cross 各1回・統合裁定・must 1バッチ修正・再レビューなし、Seal（**不可逆×外部影響**が重なる変更のみ）は direction フルパイプ。direction を起動しないタスクにも効かせる常駐トリガーは下記セットアップ参照
+- `setup` — 実装レーンの常駐トリガーを Claude Code / Codex のグローバル設定へ版付き管理ブロックとして追加・更新・削除する。dry-run と明示承認を挟み、管理外の記述は変更しない
 - `cross-review` — 実行中のクライアントと別のモデル CLI（codex exec / claude -p）に diff をレビューさせる、異ベンダーレビュー専用スキル。追跡済み差分と非 ignore 未追跡を含む SHA-256 指紋を返し、standalone では開始時・返却値・結果受領時の同一性を確認して収束までループする
 - `team-impl` — 計画ファイル駆動のチーム実装。Claude 版は teammate + SendMessage、Codex 版はサブエージェント（初回・定義更新時に `~/.codex/agents/implementer*.toml` / `reviewer.toml` を自動セットアップ）。Codex は `spawn_agent` の `agent_type` と `fork_turns="none"` で custom role を明示選択し、model / effort は role TOML を正本にする（`agent_type` field が無い runtime では縮退せず停止して Codex の更新・完全再起動を求める。2026-07-23 に役割本文同梱の縮退経路を撤去）。通常境界は balanced/medium、高リスク境界は flagship/high に振り分ける。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動する。両結果を待って根本原因単位に統合し、修正後は両承認を失効させ、同一版への二者承認まで反復する。Sign は pre + cross を各1回だけ起動し、統合裁定して must-fix を1バッチ修正して出荷する（再レビューなし・Evidence/ledger なし）。Show のプレレビュー1回・must のみという契約は変えない。検証実行は implementer の1回を正とし、リーダー・レビュアーは検証証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal の最終 smoke だけは、共同レビュー収束後の安定版へリーダーが1回実行する
 
@@ -67,22 +68,23 @@ codex plugin add dev-method-codex@mizulba-dev
 
 ## セットアップ: 実装レーンの常駐トリガー
 
-スキルはロードされて初めて効くため、`direction` を起動しないタスク（Ship / Show / Sign。レーンは direction の有無と独立）にレーン判定を効かせるには、常時ロードされるグローバル設定への追記が必要（初回のみ・配布物に乗らない）。`~/.claude/CLAUDE.md`（Claude Code）と `~/.codex/AGENTS.md`（Codex）へ以下を追記する:
+スキルはロードされて初めて効くため、`direction` を起動しない Ship / Show / Sign にも着手前の判定を効かせるには、共通 plugin の setup スキルを1回実行する:
 
-```markdown
-## 実装レーン
+```text
+# Claude Code
+/dev-method:setup
 
-実装・修正の依頼を受けたら、着手前にレーンを1行宣言してから作業する（判定の正本は dev-method の `direction` スキル）。**レーンは爆発半径だけで決め、direction の有無とは独立**（direction は設計合意の道具であり、書いても実装工程は重くならない）。**Show は原義（マージ後の事後レビュー）でなく「出荷前の1回レビュー」を指す**:
-
-- **Ship**（挙動に触れない: typo・docs・コメント・ログ文言・依存 patch 更新・自明な設定値変更）: 直接実装し、機械ゲート（lint・build・該当テスト）のみ。レビューなし
-- **Show（デフォルト）**（下位2レーンの基準に触れないすべて）: 直接実装 → 機械ゲート → プレレビュー**1回**（**must-fix のみ即対応**、should-fix / nit は蓄積して follow-up 1バッチ）。Codex は `spawn_agent` の `agent_type="reviewer"`・`fork_turns="none"` で起動し、model / effort は reviewer TOML を正本にする。`agent_type` field が無い・role が見えない・role 適用エラー・現セッションでの定義新規作成または rename は縮退せず、完全再起動または定義修正を求めて停止する。cross-review なし。UI に見える変更ではリポジトリroot・worktree root・モノレポ配下を探索し、既存シナリオの有無にかかわらず既存・軽微な変種または最小scenarioを準備して `scenario-kit smoke` を実走する。実測は `smoke <PASS|FAIL n件|評価不能|対象外>` とし、UI変更では `未整備` を使わない（UI非変更は `対象外`）
-- **Sign**（高リスク基準*に触れる、または検知器の新設・変更）: 実装 → 機械ゲート（検知器タスクは実データ・実ログ×不変式のハーネスをここに）→ pre + cross を各1回 → 統合裁定 → must-fix を1バッチ修正 → 機械ゲート green で出荷（**修正後の再レビューなし**）。cross のログ機械判定と故意ずれ検体の実行検証は維持。Evidence Package・ledger・収束ループは使わない
-- **Seal**（**不可逆**＝復旧不能なデータ変更・削除・公開後取り消し不能 ×**外部影響**＝公開 API・課金・第三者データ が**重なる**変更のみ）: `direction` を起草しフルパイプ（合意前計画レビュー・二者承認までの収束・Evidence Package・ledger）
-- *高リスク基準 = DB migration・並行処理・認可・セキュリティ・境界間契約
-- 迷ったら重い側のレーンに倒す。ユーザーがレーンを明示指定したら判定を省略する
+# Codex
+$dev-method:setup
 ```
 
-Show のプレレビューは、Claude Code では `dev-method-claude:reviewer` agent の spawn、Codex では `agent_type="reviewer"`・`fork_turns="none"` の spawn_agent で行う。`agent_type` field 欠落・role 不可視・適用失敗時の fail-closed は team-impl の前提セットアップと同じ契約に従う。
+setup は実行中のクライアントだけを既定 target とし、`check → dry-run → 対象 path と操作の確認 → 明示承認 → apply` の順で進む。Claude Code は `CLAUDE_CONFIG_DIR/CLAUDE.md`（未設定時 `~/.claude/CLAUDE.md`）、Codex は `CODEX_HOME/AGENTS.md`（未設定時 `~/.codex/AGENTS.md`）が対象。両方へ反映する場合だけ `all` を明示する。
+
+挿入するのは版付きの `dev-method:implementation-lanes` 管理ブロック1個だけで、管理外本文・改行・末尾改行・file mode・symlink は保全する。壊れたマーカー、複数ブロック、編集済み手動節、非 regular file、dangling symlink、1 MiB のサイズ上限超過のいずれかを検出した場合は全 target を変更せず停止する。既存の手動節は、公開済みテンプレートとの完全一致時だけ自動移行する。
+
+常駐ルールの要点は、Ship＝挙動非変更・機械ゲートのみ、Show＝既定・プレレビュー1回、Sign＝高リスクまたは検知器変更・pre/cross各1回、Seal＝不可逆×外部影響が重なる変更・フルパイプ。全文は配布 asset の [global-lane-rules.md](src/plugin/skills/setup/assets/global-lane-rules.md) で実行前に確認できる。
+
+plugin 更新後は setup を再実行すると版差を検出して更新する。解除は setup で `remove` を指定し、対象 path と「管理ブロックだけを除去する」ことを承認する。skill を呼べない環境だけは [同じ配布 asset](src/plugin/skills/setup/assets/global-lane-rules.md) を対象ファイルへ手動で追加する（この手動節は setup が既知テンプレートと完全一致するときだけ後から管理下へ移行する）。
 
 ## リリース手順
 

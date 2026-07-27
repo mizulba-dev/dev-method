@@ -1,5 +1,94 @@
 import { readFileSync } from 'node:fs';
 
+const LANE_SOURCES = [
+  ['direction', 'src/plugin/skills/direction/SKILL.md'],
+  ['global asset', 'src/plugin/skills/setup/assets/global-lane-rules.md'],
+  ['repository CLAUDE.md', 'CLAUDE.md'],
+];
+
+const LANE_CONTRACTS = [
+  {
+    id: 'Ship判定基準',
+    test: ({ lane, compact }) => hasInOrder(lane('Ship'), compact ? [
+      /挙動に触れない変更/,
+      /機械ゲートのみ/,
+    ] : [
+      /挙動に触れない(?:変更)?:/,
+      /typo・docs・コメント・ログ文言・依存 patch 更新・自明な設定値変更/,
+    ]),
+  },
+  {
+    id: 'Show判定基準',
+    test: ({ lane, document }) => (
+      /下位2レーンの基準に触れない(?:すべて|変更)/.test(lane('Show'))
+      && /direction の有無(?:は無関係|とは独立)/.test(document)
+    ),
+  },
+  {
+    id: 'Sign判定基準',
+    test: ({ lane, document }) => hasInOrder(lane('Sign'), [
+      /高リスク基準/,
+      /検知器.*新設・変更/,
+    ]) && hasInOrder(document, [
+      /DB migration/,
+      /並行処理/,
+      /認可/,
+      /セキュリティ/,
+      /境界間契約/,
+    ]),
+  },
+  {
+    id: 'Seal判定基準',
+    test: ({ lane }) => hasInOrder(lane('Seal'), [
+      /不可逆/,
+      /外部影響/,
+      /重なる変更(?:のみ|だけ)/,
+    ]),
+  },
+  {
+    id: 'Show工程',
+    test: ({ lane, compact }) => hasInOrder(lane('Show'), compact ? [
+      /機械ゲート/,
+      /プレレビュー1回/,
+      /must-fix のみ即対応/,
+    ] : [
+      /実装/,
+      /機械ゲート/,
+      /プレレビュー1回/,
+      /must-fix のみ即対応/,
+      /cross-review/,
+      /(?:使わ|なし|省略)/,
+    ]),
+  },
+  {
+    id: 'Sign工程',
+    test: ({ lane, compact }) => hasInOrder(lane('Sign'), compact ? [
+      /pre \+ cross/,
+      /各1回/,
+      /統合裁定/,
+      /must-fix/,
+      /1バッチ/,
+      /再レビューなし/,
+      /Evidence Package/,
+      /ledger/,
+      /収束ループなし/,
+    ] : [
+      /実装/,
+      /機械ゲート/,
+      /pre \+ cross/,
+      /各1回/,
+      /統合裁定/,
+      /must-fix/,
+      /1バッチ/,
+      /再レビュー/,
+      /(?:しない|なし)/,
+      /Evidence Package/,
+      /ledger/,
+      /使わない|なし/,
+    ]),
+  },
+];
+
 const CLAUSE_PAIRS = [
   {
     id: '実測フッター: 受理される表記ゆれの固定形（team-impl両版）',
@@ -547,6 +636,67 @@ function normalize(text) {
   return text.replace(/[ \t　]+/g, ' ').trim();
 }
 
+function normalizeLaneMeaning(text) {
+  return text
+    .replace(/[*_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasInOrder(text, patterns) {
+  let cursor = 0;
+  for (const pattern of patterns) {
+    const match = text.slice(cursor).match(pattern);
+    if (!match) return false;
+    cursor += match.index + match[0].length;
+  }
+  return true;
+}
+
+function laneLine(text, laneName) {
+  const escaped = laneName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const line = text.split(/\r?\n/).find((candidate) => (
+    new RegExp(`^\\s*(?:\\|\\s*|-\\s+)\\*\\*${escaped}(?:\\*\\*|[（(])`).test(candidate)
+  ));
+  if (line) return normalizeLaneMeaning(line);
+
+  const compactLine = text.split(/\r?\n/).find((candidate) => {
+    const value = normalizeLaneMeaning(candidate);
+    return value.includes('Ship は')
+      && value.includes('Show（デフォルト）')
+      && value.includes('Sign は')
+      && value.includes('Seal は');
+  });
+  const normalized = normalizeLaneMeaning(compactLine || '');
+  const starts = {
+    Ship: normalized.indexOf('Ship は'),
+    Show: normalized.indexOf('Show（デフォルト）'),
+    Sign: normalized.indexOf('Sign は'),
+    Seal: normalized.indexOf('Seal は'),
+  };
+  const start = starts[laneName];
+  if (start === -1) return '';
+  const later = Object.values(starts).filter((index) => index > start);
+  const end = later.length > 0 ? Math.min(...later) : normalized.length;
+  return normalized.slice(start, end);
+}
+
+function checkLaneContracts(reader) {
+  const mismatches = [];
+  for (const [sourceName, file] of LANE_SOURCES) {
+    const raw = reader(file);
+    const context = {
+      document: normalizeLaneMeaning(raw),
+      lane: (laneName) => laneLine(raw, laneName),
+      compact: file === 'CLAUDE.md',
+    };
+    for (const contract of LANE_CONTRACTS) {
+      if (!contract.test(context)) mismatches.push(`${sourceName}: ${contract.id}`);
+    }
+  }
+  return mismatches;
+}
+
 function findAllMatches(file, regex, reader) {
   const lines = reader(file).split('\n');
   const hits = [];
@@ -583,11 +733,28 @@ function checkPairs(reader) {
   return mismatches;
 }
 
-const diskReader = (file) => readFileSync(file, 'utf8');
+const laneAssetOverrideIndex = process.argv.indexOf('--lane-asset');
+const laneAssetOverride = laneAssetOverrideIndex === -1 ? null : process.argv[laneAssetOverrideIndex + 1];
+if (laneAssetOverrideIndex !== -1 && !laneAssetOverride) {
+  console.error('--lane-asset には検体ファイルを指定する');
+  process.exit(2);
+}
+const diskReader = (file) => (
+  file === 'src/plugin/skills/setup/assets/global-lane-rules.md' && laneAssetOverride
+    ? readFileSync(laneAssetOverride, 'utf8')
+    : readFileSync(file, 'utf8')
+);
 const mismatches = checkPairs(diskReader);
 if (mismatches.length > 0) {
   console.error('並行条項の不一致:');
   for (const m of mismatches) console.error(`- ${m}`);
+  process.exit(1);
+}
+
+const laneMismatches = checkLaneContracts(diskReader);
+if (laneMismatches.length > 0) {
+  console.error('実装レーン条項の不一致:');
+  for (const mismatch of laneMismatches) console.error(`- ${mismatch}`);
   process.exit(1);
 }
 
