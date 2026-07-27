@@ -9,7 +9,7 @@ AI に実装させると実装は速くなるが、代わりにレビューが�
 - 手法全体の俯瞰（フロー図・参考にした手法の対応表）: [DEV_FLOW.md](DEV_FLOW.md)
 - 設計判断の裏付けになった実測ログ: [docs/field-notes.md](docs/field-notes.md)
 
-> 自分の開発のために作ったものをそのまま公開している。要望への対応やサポートは約束できない（MIT）。
+> 自分用に作って、いまも改訂を続けているものをそのまま公開している。要望への対応やサポートは約束できないが、考え方を参考にしてもらう分には自由（MIT）。
 
 ## 4つのレーン
 
@@ -58,8 +58,6 @@ flowchart TD
 ## インストール
 
 Claude Code または Codex CLI が必要（両方に入れてもよい。`dev-method-claude` は Claude Code のみ、`dev-method-codex` は Codex のみ）。
-
-**試すだけなら** marketplace から入れればそのまま動く。**使い続けるなら fork を推奨する** — この手法は意図的にオピニオネイテッドで、モデル割当・`~/dev-notes/` のパス・PaPut 連携・friction の閾値はすべて自分の環境向けの確定値として書かれている。上流の改訂を受け取り続けるより、fork して自分の手法として育てる方が本線になるはず。
 
 ```bash
 # Claude Code
@@ -164,19 +162,6 @@ direction 置き場: <パス>          # 例: repo 内 docs/direction を維持�
 </details>
 
 各プラグインは `.claude-plugin/plugin.json` と `.codex-plugin/plugin.json` の dual manifest を持ち、version は `npm version patch` で6マニフェスト全てへ同期される（`scripts/sync-plugin-version.mjs`）。スキル本文が正本で、`DEV_FLOW.md` は俯瞰用のまとめ。記述が食い違う場合はスキル本文が優先する。
-
-<details>
-<summary>fork したとき最初に触る場所</summary>
-
-- `.claude-plugin/marketplace.json` の `owner` / marketplace 名 — 自分の GitHub アカウントへ。README とリリース手順の `mizulba-dev` も同時に置換する
-- `scripts/check-model-map.mjs` の `ROLE_MODELS` — 使うモデルと effort の正本。README のモデル割当表・各スキル本文と突き合わせて検証されるので、モデルを変えるならこの3箇所を揃える
-- `src/plugin/skills/direction/SKILL.md` のレーン表 — レーン判定の正本。基準を変えるなら `src/plugin/skills/setup/assets/global-lane-rules.md`（グローバル設定へ挿入される全文）と `DEV_FLOW.md` も追従させる
-- `src/plugin/skills/method-check/` — friction ログの置き場（`~/dev-notes/`）と改訂トリガーの閾値（未対応5件・同型2回）
-- PaPut 連携（`direction` 起草前の過去決定検索、完了時の design_doc 保存）は外部 MCP サーバーに依存する。使わないなら該当手順を落とす
-
-変更後は `npm run preversion` で4本の整合チェック（モデル割当・スキル間の共有条項・setup の fixture・method-check の fixture）が走る。
-
-</details>
 
 ## ライセンス
 
