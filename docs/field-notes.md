@@ -16,6 +16,13 @@
 - Codex 版 execution の spawn_agent / wait_agent による単一 implementer 運用（2026-07-09 実測）
 - Codex 版 execution の `fork_turns="none"` / send_message / followup_task / list_agents 運用（2026-07-11 実測）
 
+## Claude Code の teammate 有効化フラグ
+
+- `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` は現行版で生きている（2026-07-28、v2.1.220 のバイナリを実測）。判定は `if (!env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS && !argv.includes("--agent-teams")) return false;` に続けてサーバー側 feature flag（既定 true）を AND で見る形。環境変数か `--agent-teams` フラグのどちらかで有効になり、サーバー側から無効化できる余地が残っている
+- teammate 起動時、子プロセスの環境へ `CLAUDECODE=1` と `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` を注入するコードがある（同上）。親で有効なら teammate 側にも伝播する
+- `Agent` ツールの `team_name` / `mode` パラメータは Deprecated（無視される）。チームはセッション開始時に1つだけ自動生成され、`~/.claude/teams/session-<セッションIDの先頭8桁>/config.json` にリーダー自身が `team-lead` / `backendType: "in-process"` として登録される。spawn した teammate は同じチームへ追加される。チームを名前で作り分ける操作・`--team` 相当の CLI フラグは存在せず、別チーム＝別セッション（2026-07-28 実測）
+- dev-method 側は `team_name` / `mode` を使っていないため、この廃止による追従は不要（同日、`src/` 全体を grep して0件を確認）
+
 ## hook
 
 - Claude 版 SubagentStop 報告ゲート hook の撤去（2026-07-23）: プラグイン経由の発火が実測で不発（報告なし終了の reviewer が素通り・transcript に hook 痕跡ゼロ。settings.json 直書き probe では発火実績あり）のため、hook 本体・fixture ハーネスごと削除した。teammate の報告不達対策は agents 定義の明示配送条項と催促上限の運用を正本に戻す

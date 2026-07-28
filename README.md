@@ -79,6 +79,22 @@ codex plugin add dev-method-codex@mizulba-dev
 
 スキル呼び出しは namespace 付き（例: `/dev-method:direction`）。`execution` は各クライアントに自分用の1つだけが入るため名前衝突しない。
 
+### Claude Code: teammate 機能を有効化する
+
+`dev-method-claude` の `execution` は implementer / reviewer を teammate として起動するため、Claude Code 側で teammate 機能が有効になっている必要がある。`~/.claude/settings.json`（`CLAUDE_CONFIG_DIR` を設定している場合はその配下）に次を追加する:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+起動ごとに切り替えたい場合は、環境変数の代わりに `claude --agent-teams` でもよい。Codex 側は別機構（`spawn_agent`）のため、この設定は不要。
+
+実験的フラグのため名前が変わる・GA 化して不要になる可能性がある。teammate が起動しなくなったらまずこの設定を疑う。確認済みの挙動は [docs/field-notes.md](docs/field-notes.md) を参照。
+
 ## セットアップ: レーン判定を常駐させる
 
 スキルはロードされて初めて効くため、`direction` を起動しない日常の変更（Ship / Show / Sign）にも着手前のレーン判定を効かせるには、`setup` スキルを1回実行する:
