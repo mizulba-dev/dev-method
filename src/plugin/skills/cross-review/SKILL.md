@@ -11,13 +11,13 @@ $ARGUMENTS の1つ目が対象リポジトリの絶対パス。2つ目以降は�
 レビュアーは**実行中のクライアントとは別のモデル CLI** を選ぶ:
 
 - Claude Code 上で実行中 → `codex exec --cd <対象リポジトリ> --sandbox read-only -m gpt-5.6-sol -c 'model_reasoning_effort="high"' --output-schema <スキーマファイル> -o <結果JSON> --json "<プロンプト>"`（model 指定失敗時の経路は下記 provider 契約に従う。`--json` はイベントログを stdout に出すためで、逸脱検知に使う）
-- Codex 上で実行中 → `cd <対象リポジトリ> && claude -p "<プロンプト>" --model fable --effort high --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(git log:*)" --output-format stream-json --verbose`（スキーマ強制フラグが無いため、末尾「出力スキーマ」に適合する JSON のみを出力するようプロンプトで指示する。stdout はイベントログになり、結果 JSON は check-review-log.mjs が抽出する。`stream-json` は `--verbose` を要求する）
+- Codex 上で実行中 → `cd <対象リポジトリ> && claude -p "<プロンプト>" --model opus --effort high --allowedTools "Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(git log:*)" --output-format stream-json --verbose`（スキーマ強制フラグが無いため、末尾「出力スキーマ」に適合する JSON のみを出力するようプロンプトで指示する。stdout はイベントログになり、結果 JSON は check-review-log.mjs が抽出する。`stream-json` は `--verbose` を要求する）
 
 provider の起動は初回を含め最大2試行とする。`400 model not supported` のときだけ同じ外部 CLI でモデル指定を外す既存経路へ進み、429・5xx・quota・unavailable のときだけ起動環境が列挙できる同じ外部モデルファミリーの別の利用可能な最上位モデルへ切り替える。これらは排他的に扱い、同じ失敗条件を反復しない。救出結果から全必須fieldを持つ正規化JSONを作り、schema・verdict/findings整合・diff指紋を検証できた場合だけproviderを再実行せず、それ未満は試行失敗として扱う。2試行目も失敗した、または適格な代替がない場合は fail-closed で停止して呼び出し元へ `provider_unavailable` と試行履歴を返す。standalone起動時だけユーザー判断を求める。
 
 レビュアーはレビューだけを行い、コードは修正しない（codex は read-only sandbox で強制。claude は allowedTools がグローバル settings の許可ルールと合成されるため強制は不完全で、プロンプトの明文化と手順4のログ機械判定で担保する）。レビュアーを teammate として挟まず、リーダーが直接 CLI を起動する2層構成。
 
-呼び出し元（execution 等）が同ファミリー最上位モデルによるプレレビューも行う場合は、同じ diff 指紋へ両レビューを並列起動する共同ラウンドとして扱う。cross-review 自体は異ベンダーによる diff レビュー結果を1件返すところまでを責務とし、共同ラウンド中は単独で修正・再レビューのループを進めない。両結果の待機・照合・統合・再起動は呼び出し元のスキルを正本とする。
+呼び出し元（execution 等）が役割別の固定モデルによるプレレビューも行う場合は、同じ diff 指紋へ両レビューを並列起動する共同ラウンドとして扱う。cross-review 自体は異ベンダーによる diff レビュー結果を1件返すところまでを責務とし、共同ラウンド中は単独で修正・再レビューのループを進めない。両結果の待機・照合・統合・再起動は呼び出し元のスキルを正本とする。
 
 execution から Seal の共同レビューとして呼ばれる場合だけ、呼び出し元から canonical review-dir、`tooling-manifest.json` の絶対パスと内容 SHA-256、`review_unit_id`、固定 checker の verify を通過した全境界manifestの絶対パスと内容 SHA-256、review-required 一覧、direction 本文 SHA-256、開始時 diff 指紋を受け取る。これらを Seal 作業単位入力と呼ぶ。cross-review は受け取った絶対パスを使い、tooling をコピー・再生成せず、`review_unit_id` を作り直さず、兄弟プラグインやキャッシュ位置を推測しない。Seal 作業単位入力が欠けるか呼び出し元の起動前 checker 結果と一致しない場合は CLI を起動せず fail-closed で返す。
 

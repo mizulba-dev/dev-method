@@ -39,7 +39,7 @@ worktree並列では起動前に統合先checkoutと共通base commitを固定�
 
 Show ではプレレビューだけを単独起動し、cross-review と diff 指紋の共同ラウンドは行わない。
 
-`reviewer` teammate は Agent tool で `subagent_type: "dev-method-claude:reviewer"`（model fable / effort high、`tools` で read-only 制限済み）を指定する。spawn prompt には `cross-review` の `references/review-prompt.md` の観点ブロック・変更範囲・検証証跡を渡し、`{{DIFF_FINGERPRINT}}` は `diff指紋: 対象外（Show）` へ置換する。「diff指紋: 対象外（Show）」が渡された場合は最終報告へそのまま返す。確信度の高い指摘だけを重大度順で求める。
+`reviewer` teammate は Agent tool で `subagent_type: "dev-method-claude:reviewer"`（model opus / effort high、`tools` で read-only 制限済み）を指定する。spawn prompt には `cross-review` の `references/review-prompt.md` の観点ブロック・変更範囲・検証証跡を渡し、`{{DIFF_FINGERPRINT}}` は `diff指紋: 対象外（Show）` へ置換する。「diff指紋: 対象外（Show）」が渡された場合は最終報告へそのまま返す。確信度の高い指摘だけを重大度順で求める。
 
 Show のプレレビューは1回で終了する（反復しない）。**must-fix だけ**を即対応し（軽微なら直接修正、それ以外は実装担当へ差し戻す）、should-fix / nit は蓄積して follow-up 1バッチへ回す。
 
@@ -77,7 +77,7 @@ code ledger では各返却の `approve` を must-fix / should-fix ゼロ、`nee
 
 共同ラウンドは、先に `cross-review` の手順1〜2だけを実行して作業ディレクトリ・helper・開始時 diff 指紋を準備し、次に reviewer を spawn し、その起動後に完了を待たず `cross-review` の手順3以降を開始する。契約追補がある場合は、その配布と担当の反映完了確認を開始時 diff 指紋の固定より前に終え、指紋固定からレビュー起動までの間に diff を変える指示を出さない（追補反映で指紋が失効するとラウンド1回分の起動を浪費する）。
 
-同じ開始時指紋に対して、`reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model fable / effort high、`tools` で read-only 制限済み）をバックグラウンド spawn し、その完了を待つ前に `cross-review` をバックグラウンド起動する。reviewer は implementer / implementer-critical とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる。
+同じ開始時指紋に対して、`reviewer` teammate（Agent tool で `subagent_type: "dev-method-claude:reviewer"`。model opus / effort high、`tools` で read-only 制限済み）をバックグラウンド spawn し、その完了を待つ前に `cross-review` をバックグラウンド起動する。reviewer は implementer / implementer-critical とは別の read-only 専用 teammate で、レビュー結果は SendMessage で明示配送させる。
 
 両レビューには同じ開始時 diff 指紋・計画ファイル・対象範囲・implementer の検証証跡（実行コマンド・exit code・pass/fail 件数）・重点観点を渡す。Seal ではさらに、起動前ゲートで固定した tooling manifest と全境界manifestの絶対パス・内容 SHA-256、`review_unit_id`、review-required 一覧、direction 本文 SHA-256 も同一値で渡す。spawn prompt の基本観点は `cross-review` の `references/review-prompt.md` の観点ブロックと揃え、確信度の高い指摘のみを重大度順で求める。reviewer はテストを実行しない静的レビュー専任で、テスト不足・空通しの観点は証跡とテストコードの照合で判定させる。reviewer の最終報告には開始時 diff 指紋を64桁小文字16進でそのまま返させる。
 

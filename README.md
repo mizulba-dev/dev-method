@@ -45,7 +45,7 @@ flowchart TD
 
 **1. レーンは爆発半径だけで決まる。** 計画ドキュメントを書いたかどうかとは独立させた。計画は設計合意の道具であって、書いたせいで実装工程が重くなるなら誰も書かなくなる。
 
-**2. レビューの片翼はつねに別ベンダー。** Sign 以上では、同ファミリー最上位モデルによるプレレビューと、別ベンダー CLI（Claude ↔ Codex）による `cross-review` を同一 diff の SHA-256 指紋へ並列で当てる。同系統モデルが共有する盲点は同系統では潰せない。
+**2. レビューの片翼はつねに別ベンダー。** Sign 以上では、役割別の固定モデルによるプレレビューと、別ベンダー CLI（Claude ↔ Codex）による `cross-review` を同一 diff の SHA-256 指紋へ並列で当てる。同系統モデルが共有する盲点は同系統では潰せない。
 
 **3. 反復レビューをやめた。** Sign は pre + cross を各1回だけ回して統合裁定し、修正後の再レビューはしない。受け皿は機械ゲートと、下記の摩擦ループに移してある。レビューを何周も回すのは、周回あたりの検出効率が落ちていくわりにコストが線形にかかる。
 
@@ -127,7 +127,7 @@ $dev-method:setup
 | `playwright-cli` | ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み） |
 | `plugin-release` | バージョンバンプ → tag push → 配布 → 両 CLI 反映までの一気通貫リリース |
 
-`execution` の運用上の要点として、**検証の実行は implementer の1回を正とし**、リーダーもレビュアーも証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal では共同ラウンド開始時の同じ diff 指紋へ、同ファミリー最上位モデル（Claude 上は Fable、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動し、両結果を根本原因単位に統合して、同一版への二者承認まで反復する。
+`execution` の運用上の要点として、**検証の実行は implementer の1回を正とし**、リーダーもレビュアーも証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal では共同ラウンド開始時の同じ diff 指紋へ、役割別の固定モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動し、両結果を根本原因単位に統合して、同一版への二者承認まで反復する。
 
 ### Evidence Package（Seal のみ）
 
@@ -135,15 +135,15 @@ Seal の Evidence Package は、direction で明示した既知契約と、そ�
 
 ## モデル割当
 
-役割ごとに Claude 版・Codex 版で使うモデルを固定する。実装は速いモデル、レビューは各ファミリー最上位、そして高リスク role は高リスク編集面だけに局所割り当てし、同じ境界の通常変更へは伝播させない。
+役割ごとに Claude 版・Codex 版で使うモデルを固定する。実装は効率重視のモデル、レビューは役割別に固定した高性能モデルを使い、高リスク role は高リスク編集面だけに局所割り当てし、同じ境界の通常変更へは伝播させない。
 
 | 役割 | Claude 版 | Codex 版 |
 | --- | --- | --- |
 | implementer（通常境界） | Sonnet/medium | GPT-5.6 Terra/medium |
 | implementer-critical（高リスク境界） | Opus/high | GPT-5.6 Sol/high |
-| プレレビュー reviewer | Fable/high | GPT-5.6 Sol/high |
+| プレレビュー reviewer | Opus/high | GPT-5.6 Sol/high |
 
-`cross-review` は実行中のクライアントとは別モデルの CLI を呼ぶ: Codex 上で実行中なら Claude Fable/high を、Claude Code 上で実行中なら Codex の GPT-5.6 Sol/high を呼ぶ。
+`cross-review` は実行中のクライアントとは別モデルの CLI を呼ぶ: Codex 上で実行中なら Claude Opus/high を、Claude Code 上で実行中なら Codex の GPT-5.6 Sol/high を呼ぶ。
 
 この表は `scripts/check-model-map.mjs` がスキル本文と突き合わせて検証する。改廃時は表とスクリプトの定数を同時に更新する。
 

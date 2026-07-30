@@ -78,7 +78,7 @@ flowchart TD
     S2 --> S2b{"UIに見える変更？"}
     S2b -->|"Yes"| S2c["scenario-kit smoke 実走<br/>（既存 or 最小シナリオを準備）"]
     S2b -->|"No"| S3
-    S2c --> S3["プレレビュー1回<br/>reviewer agent（Fable/high・read-only）"]
+    S2c --> S3["プレレビュー1回<br/>reviewer agent（Opus/high・read-only）"]
     S3 --> S4["must-fix のみ即対応"]
     S4 --> S5["出荷 ＋ 実測フッター1行"]
     S3 -.->|"should-fix / nit"| S6["蓄積 → follow-up 1バッチ"]
@@ -92,7 +92,7 @@ flowchart TD
   subgraph SIGNLANE ["Sign（高リスク・検知器）"]
     G1["実装"] --> G2["機械ゲート<br/>検知器タスクは実データ・実ログ<br/>× 不変式のハーネス"]
     G2 --> G3["同一 diff 指紋へ並列起動"]
-    G3 --> G4["pre レビュー1回<br/>（同ファミリー最上位）"]
+    G3 --> G4["pre レビュー1回<br/>（役割別固定モデル）"]
     G3 --> G5["cross-review 1回<br/>（異ベンダーCLI・read-only監査つき）"]
     G4 --> G6["統合裁定<br/>根本原因単位でマージ"]
     G5 --> G6
@@ -118,7 +118,7 @@ flowchart TD
   I1 --> I2["implementer が実装＋検証実行<br/>（検証はimplementerの1回が正）"]
   I2 --> I3["起動前ゲート<br/>Evidence Package verify（固定checker・fail-closed）"]
   I3 --> R1["共同レビュー Rn — 同一 diff 指紋へ並列"]
-  R1 --> R2["pre: reviewer agent<br/>（Fable/high・read-only）"]
+  R1 --> R2["pre: reviewer agent<br/>（Opus/high・read-only）"]
   R1 --> R3["cross: 異ベンダーCLI<br/>（GPT-5.6 Sol/high・ログ機械監査）"]
   R2 --> R4["code ledger 検証 → 根本原因単位で統合<br/>1バッチ修正 → 両承認を失効"]
   R3 --> R4
@@ -162,10 +162,10 @@ flowchart TD
 | --- | --- | --- |
 | implementer（通常境界） | Sonnet / medium | GPT-5.6 Terra / medium |
 | implementer-critical（高リスク境界） | Opus / high | GPT-5.6 Sol / high |
-| プレレビュー reviewer | Fable / high | GPT-5.6 Sol / high |
-| cross-review（異ベンダー呼び出し） | → GPT-5.6 Sol / high | → Fable / high |
+| プレレビュー reviewer | Opus / high | GPT-5.6 Sol / high |
+| cross-review（異ベンダー呼び出し） | → GPT-5.6 Sol / high | → Opus / high |
 
-実装は速いモデル、レビューは各ファミリー最上位、そして**レビューの片翼はつねに別ベンダー** — 同系統モデルが共有する盲点を異種混成で潰す配分。高リスク role は高リスク編集面だけに局所割り当てし、同じ境界の通常変更へは伝播させない。
+実装は効率重視のモデル、レビューは役割別に固定した高性能モデル、そして**レビューの片翼はつねに別ベンダー** — 同系統モデルが共有する盲点を異種混成で潰す配分。高リスク role は高リスク編集面だけに局所割り当てし、同じ境界の通常変更へは伝播させない。
 
 ## 6. 改善ループ — 手法自体を計測・改訂する
 
