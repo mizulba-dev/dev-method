@@ -182,7 +182,7 @@ function extractSubstitutions(command) {
 }
 
 // シングル・ダブル両クォートの外にある書込リダイレクト（> / >>）を検出する。`>&2` 等の fd 複製は書込先が
-// 既存ストリームのため許可し、ファイルへの > / >> だけを拒否する。
+// 既存ストリームのため許可し、`/dev/null` 宛は破棄で副作用がないため許可する。ファイルへの > / >> だけを拒否する。
 function hasWriteRedirect(command) {
   let quote = null;
   let i = 0;
@@ -198,6 +198,11 @@ function hasWriteRedirect(command) {
     if (ch === "'" || ch === '"') { quote = ch; i += 1; continue; }
     if (ch === ">") {
       if (command[i + 1] === "&" && /\d/.test(command[i + 2] ?? "")) { i += 3; continue; }
+      let j = i + 1;
+      if (command[j] === ">") j += 1;
+      while (/[ \t]/.test(command[j] ?? "")) j += 1;
+      const target = /^[^\s|;&<>()]+/.exec(command.slice(j))?.[0] ?? "";
+      if (target === "/dev/null") { i = j + target.length; continue; }
       return true;
     }
     i += 1;
@@ -274,22 +279,36 @@ const CONTROL_PREFIX = new RegExp(
 );
 const CONTROL_ONLY = /^(?:do|done|then|fi|else|esac|!|\{|\}|\(|\))$/;
 
+// 実行位置を保ったまま前置されるラッパー（env node …・timeout 30 node … 等）。timeout / stdbuf / nice /
+// ionice は自身の引数（オプションか時間・数値）まで剥がす。`nice node x` のように引数を取らない形で本体を
+// 食わないよう、剥がす引数はオプション形か数値・時間表記に限る。
+const EXEC_WRAPPER_PREFIX = new RegExp(
+  [
+    "^(?:env|command|sudo|nohup|setsid|watch)\\s+(?:-\\S+\\s+)*",
+    "^(?:timeout|stdbuf|nice|ionice)\\s+(?:-\\S+\\s+|\\d+(?:\\.\\d+)?[smhd]?\\s+)*",
+  ].join("|"),
+);
+
 function stripControlPrefix(statement) {
   let out = statement;
-  while (CONTROL_PREFIX.test(out)) out = out.replace(CONTROL_PREFIX, "");
+  let previous = null;
+  while (out !== previous) {
+    previous = out;
+    if (CONTROL_PREFIX.test(out)) out = out.replace(CONTROL_PREFIX, "");
+    if (EXEC_WRAPPER_PREFIX.test(out)) out = out.replace(EXEC_WRAPPER_PREFIX, "");
+  }
   return out;
 }
 
 // 複合コマンド（例: git diff HEAD && go test ./...）を ; && || で独立ステートメントに分割し、
 // 各ステートメント内はさらに | でパイプ連鎖に分割する（いずれもクォート外のトークンのみで分割）。
-// パイプ連鎖の先頭は制御 keyword を剥がして通常のコマンドとして判定し、2番目以降は read-only フィルタ
-// （head/tail/wc/grep/rg/sort/awk/cut/uniq/sed/nl/jq/cat/tr）なら許可、`sh -c` / `xargs … sh -c` は
-// classifyShellFollower で内側 payload が全部閲覧系の場合だけ許可、それ以外（tee 等の書込・実行系）は
-// 無条件で違反として扱う。
+// パイプ連鎖の先頭は制御 keyword を剥がして通常のコマンドとして判定し、2番目以降は classifyFollower で
+// 実行系 denylist に照らして判定する。
 function splitCommand(command) {
   const statementSplit = splitOutsideQuotes(command, ["&&", "||", ";"]);
   let unbalanced = statementSplit.unbalanced;
   const primaries = [];
+  const strippedPrimaries = [];
   const pipeFollowers = [];
   for (const stmt of statementSplit.parts) {
     const pipelineSplit = splitOutsideQuotes(stmt, ["|"]);
@@ -297,16 +316,40 @@ function splitCommand(command) {
     const pipeline = pipelineSplit.parts;
     if (pipeline.length === 0) continue;
     const head = stripControlPrefix(pipeline[0]);
-    if (head.length > 0 && !CONTROL_ONLY.test(head)) primaries.push(head);
+    if (head.length > 0 && !CONTROL_ONLY.test(head)) {
+      primaries.push(head);
+      // 制御前置を剥がして得た本体（ループ本体・条件節等）は後段と同じ実行位置として扱う。
+      if (head !== pipeline[0]) strippedPrimaries.push(head);
+    }
     pipeFollowers.push(...pipeline.slice(1));
   }
-  return { primaries, pipeFollowers, unbalanced };
+  return { primaries, strippedPrimaries, pipeFollowers, unbalanced };
 }
 
-const READ_ONLY_PIPE_FILTER = /^(head|tail|wc|grep|rg|sort|awk|cut|uniq|sed|nl|jq|cat|tr)\b/;
-// sh -c の内側 payload に許す閲覧系（パイプ後段フィルタ＋出力系 echo/printf）。
-const READ_ONLY_INNER = /^(echo|printf|head|tail|wc|grep|rg|sort|awk|cut|uniq|sed|nl|jq|cat|tr)\b/;
+// パイプ後段・ラッパー payload の実行系 denylist。閲覧系の許可リストは持たず、この denylist・ユーザー
+// denylist・書込（リダイレクト / in-place フラグ）のいずれにも当たらないサブコマンドは許可する。
+// git は閲覧が主用途のためここに入れず、変更系 git はユーザー denylist（例 `git commit`）で捕捉する。
+const EXEC_DENYLIST = new RegExp(
+  "^(?:\\S*/)?(?:" +
+    [
+      "node|deno|bun|sh|bash|zsh|ksh|fish|eval|exec|source|\\.",
+      "python3?|ruby|perl|php|java|dotnet|go|cargo|rustc|gradlew?|mvn|make|cmake|ninja",
+      "npm|npx|pnpm|yarn|pip3?|gem|bundle|composer|rake|tox",
+      "pytest|jest|vitest|mocha|tsc|eslint|prettier|rubocop",
+      "docker|podman|kubectl|terraform|gh|ssh|scp|rsync|curl|wget",
+      "rm|rmdir|mv|cp|dd|tee|truncate|chmod|chown|ln|mkdir|touch|install|patch|kill|pkill|killall",
+    ].join("|") +
+    ")(?![\\w-])", // 後続が語構成文字・ハイフンなら別コマンド（shasum・gofmt・npm-check 等）として一致させない
+);
 const GIT_PREFIX = /^git\b/;
+// 実行位置に現れる変更系 git サブコマンド（閲覧系 git は許可のまま）。git 自体のグローバルオプション
+// （-C <path>・--no-pager 等）を読み飛ばしてからサブコマンド名を見る。
+const MUTATING_GIT = new RegExp(
+  "^git(?:\\s+(?:-[cC]\\s+\\S+|--\\S+(?:=\\S+)?|-\\S+))*\\s+(?:" +
+    "apply|am|add|commit|push|pull|fetch|clone|init|checkout|switch|restore|reset|revert|clean" +
+    "|rm|mv|stash|merge|rebase|cherry-pick|gc|prune|update-ref|filter-branch|submodule|worktree" +
+    ")(?![\\w-])",
+);
 
 // 閲覧系 head でも書込になる in-place フラグ（sed -i / sort -o / awk -i inplace）は read-only にしない。
 function hasInPlaceFlag(statement) {
@@ -318,60 +361,88 @@ function hasInPlaceFlag(statement) {
   return false;
 }
 
-// sh -c 内側 payload の許可条件（allowlist 文脈）: 全サブコマンドが閲覧系 head かつ in-place フラグなし、
-// live substitution（$()・バッククォート・<() >()）なし、ファイルへの書込リダイレクト（> / >>）なし。
-function innerPayloadReadOnly(payload) {
-  const inner = splitCommand(payload);
-  if (inner.unbalanced) return { readOnly: false, unparseable: true };
-  const substitutions = extractSubstitutions(payload);
-  if (substitutions.unbalanced) return { readOnly: false, unparseable: true };
-  const statements = [...inner.primaries, ...inner.pipeFollowers];
-  const readOnly =
-    inner.primaries.length > 0 &&
-    substitutions.bodies.length === 0 &&
-    !hasWriteRedirect(payload) &&
-    statements.every((p) => READ_ONLY_INNER.test(p) && !hasInPlaceFlag(p));
-  return { readOnly, unparseable: false };
+// サブコマンド単位の実行系判定: 実行系 denylist・ユーザー denylist・in-place フラグのいずれかに一致するか。
+function isExecStatement(statement) {
+  const body = stripControlPrefix(statement);
+  if (body.length === 0 || CONTROL_ONLY.test(body)) return false;
+  return EXEC_DENYLIST.test(body) || MUTATING_GIT.test(body) || pattern.test(body) || hasInPlaceFlag(body);
 }
 
-// 引数を取る xargs オプションの分離形式（-n 1 等）。結合形式（-n1）は startsWith('-') の読み飛ばしで足りる。
-const XARGS_FLAG_WITH_ARG = /^-(n|L|P|I|s|d|a|E|e)$/;
+// ラッパー（sh -c / xargs … sh -c）の内側 payload を同じ規則で再解析する。実行系サブコマンド・書込
+// リダイレクト・コマンド置換内の実行系のいずれかがあれば違反。分割不能・置換の不均衡・実行対象なしは
+// 解析不能として fail-closed にする。
+function payloadViolation(payload) {
+  const inner = splitCommand(payload);
+  if (inner.unbalanced) return { violation: true, unparseable: true };
+  const substitutions = extractSubstitutions(payload);
+  if (substitutions.unbalanced) return { violation: true, unparseable: true };
+  if (inner.primaries.length === 0) return { violation: true, unparseable: true };
+  let violation = hasWriteRedirect(payload) || inner.primaries.some(isExecStatement);
+  let unparseable = false;
+  for (const nested of [...inner.pipeFollowers.map(classifyFollower), ...substitutions.bodies.map(payloadViolation)]) {
+    if (!nested.violation) continue;
+    violation = true;
+    unparseable = unparseable || nested.unparseable;
+  }
+  return { violation, unparseable };
+}
 
-// パイプ後段の `sh -c '<payload>'` / `xargs [flags] sh -c '<payload>'` は、引用 payload を同じ規則で
-// 再解析し、innerPayloadReadOnly の全条件を満たす場合だけ read-only として許可する。
-// payload の欠落・未終端クォート・分割不能は unparseable（fail-closed で違反）、実行系の混入は違反。
-function classifyShellFollower(follower) {
-  const { words, unterminated } = tokenizeShellWords(follower);
-  if (unterminated) return { readOnly: false, unparseable: true };
-  let index = 0;
-  const startedWithXargs = words[index] === "xargs";
-  if (startedWithXargs) {
+// 引数を取る xargs オプションの分離形式（-n 1・--max-procs 1 等）。結合形式（-n1・-I{}・--replace={}）は
+// オプション語1つで完結する。ここに無い長オプションは引数の有無を決められないため、実行 head を確定できず
+// fail-closed（unparseable）にする。
+const XARGS_FLAG_WITH_ARG = /^-(n|L|P|I|i|s|d|a|E|e)$/;
+const XARGS_LONG_WITH_ARG = /^--(max-args|max-lines|max-procs|max-chars|replace|arg-file|delimiter|eof|process-slot-var)$/;
+const XARGS_LONG_NO_ARG = /^--(null|no-run-if-empty|verbose|interactive|open-tty|exit|show-limits|help|version)$/;
+
+// xargs のオプション列を消費して実行 head の位置を返す。決められない場合は unparseable。
+function skipXargsFlags(words, start) {
+  let index = start;
+  while (index < words.length && words[index].startsWith("-") && words[index] !== "-") {
+    const flag = words[index];
+    if (flag.startsWith("--")) {
+      const name = flag.split("=")[0];
+      if (flag.includes("=") || XARGS_LONG_NO_ARG.test(name)) index += 1;
+      else if (XARGS_LONG_WITH_ARG.test(name)) index += 2;
+      else return { index, unparseable: true };
+      continue;
+    }
+    if (XARGS_FLAG_WITH_ARG.test(flag)) index += 1;
     index += 1;
-    while (index < words.length && words[index].startsWith("-")) {
-      if (XARGS_FLAG_WITH_ARG.test(words[index])) index += 1;
-      index += 1;
-    }
   }
-  if (!(index < words.length && /^(?:\/bin\/|\/usr\/bin\/)?(?:zsh|bash|sh)$/.test(words[index]))) {
-    // xargs 直接実行形（xargs rg -n … 等）: 実行対象 head が閲覧系なら sh -c payload と同じ read-only 条件
-    //（in-place フラグ・live substitution・書込リダイレクトなし）で許可する。
-    if (startedWithXargs && index < words.length) {
-      const substitutions = extractSubstitutions(follower);
-      const readOnly =
-        READ_ONLY_INNER.test(words[index]) &&
-        !hasInPlaceFlag(words.slice(index).join(" ")) &&
-        !substitutions.unbalanced &&
-        substitutions.bodies.length === 0 &&
-        !hasWriteRedirect(follower);
-      return { readOnly, unparseable: false };
-    }
-    return { readOnly: false, unparseable: false };
+  return { index, unparseable: false };
+}
+
+// パイプ後段のサブコマンドを判定する。`sh -c '<payload>'` / `xargs [flags] sh -c '<payload>'` は引用
+// payload を payloadViolation で再解析し、それ以外（xargs 直接実行形を含む）は実行系 denylist・書込
+// リダイレクト・in-place フラグ・コマンド置換内の実行系だけを違反とする。
+// payload の欠落・未終端クォートは unparseable（fail-closed で違反）。
+function classifyFollower(follower) {
+  const { words, unterminated } = tokenizeShellWords(follower);
+  if (unterminated) return { violation: true, unparseable: true };
+  let index = 0;
+  if (words[index] === "xargs") {
+    const skipped = skipXargsFlags(words, index + 1);
+    if (skipped.unparseable || skipped.index >= words.length) return { violation: true, unparseable: true };
+    index = skipped.index;
   }
-  index += 1;
-  if (index >= words.length || !/^-l?c$/.test(words[index])) return { readOnly: false, unparseable: false };
-  index += 1;
-  if (index >= words.length) return { readOnly: false, unparseable: true };
-  return innerPayloadReadOnly(words[index]);
+  if (/^(?:\/bin\/|\/usr\/bin\/)?(?:zsh|bash|sh)$/.test(words[index] ?? "")) {
+    index += 1;
+    if (index >= words.length || !/^-l?c$/.test(words[index])) return { violation: true, unparseable: false };
+    index += 1;
+    if (index >= words.length) return { violation: true, unparseable: true };
+    return payloadViolation(words[index]);
+  }
+  const substitutions = extractSubstitutions(follower);
+  if (substitutions.unbalanced) return { violation: true, unparseable: true };
+  let violation = hasWriteRedirect(follower) || isExecStatement(words.slice(index).join(" "));
+  let unparseable = false;
+  for (const body of substitutions.bodies) {
+    const nested = payloadViolation(body);
+    if (!nested.violation) continue;
+    violation = true;
+    unparseable = unparseable || nested.unparseable;
+  }
+  return { violation, unparseable };
 }
 
 function normalizeResultJson(resultText) {
@@ -443,26 +514,28 @@ function parseReviewResult(resultText) {
   return { result };
 }
 
-// denylist（検証・変更系コマンド）に一致する実行だけを違反とする。パイプ後段は read-only
-// フィルタなら無視し、`sh -c` / `xargs … sh -c` は内側 payload が全部閲覧系の場合だけ許可、
-// それ以外（tee 等の書込・実行系）は無条件で違反に含める。denylist に一致しない
+// denylist（検証・変更系コマンド）に一致する実行だけを違反とする。パイプ後段・ラッパー payload も
+// 閲覧系の許可リストではなく実行系 denylist（+ 書込リダイレクト・in-place フラグ・置換内の実行系）で
+// 判定し、どれにも当たらないものは許可する。denylist に一致しない
 // 非 git コマンド（閲覧系）は違反にせず、hasNonGit で otherCommands 判定に使う。
 // --allow パターン（検知器変更レビューの検体照合実行の許可）に一致するサブコマンドは違反にせず
 // allowed へ列挙する。解析不能（クォート不均衡・unwrap 不能ラッパー）は allow より優先して違反とする
 // （何が実行されたか検証できない実行を許可しない）。
 function classifyCommand(command, wrapperUnparseable = false) {
-  const { primaries, pipeFollowers, unbalanced } = splitCommand(command);
+  const { primaries, strippedPrimaries, pipeFollowers, unbalanced } = splitCommand(command);
   if (wrapperUnparseable || unbalanced) {
     return { violation: true, hasNonGit: true, unparseable: true, allowed: [] };
   }
   const isAllowed = (p) => allowPattern != null && allowPattern.test(p);
   const allowed = [...primaries, ...pipeFollowers].filter(isAllowed);
-  let violation = primaries.some((p) => !isAllowed(p) && pattern.test(p));
+  let violation =
+    primaries.some((p) => !isAllowed(p) && pattern.test(p)) ||
+    strippedPrimaries.some((p) => !isAllowed(p) && isExecStatement(p));
   let unparseable = false;
   for (const p of pipeFollowers) {
-    if (isAllowed(p) || READ_ONLY_PIPE_FILTER.test(p)) continue;
-    const follower = classifyShellFollower(p);
-    if (follower.readOnly) continue;
+    if (isAllowed(p)) continue;
+    const follower = classifyFollower(p);
+    if (!follower.violation) continue;
     violation = true;
     if (follower.unparseable) unparseable = true;
   }

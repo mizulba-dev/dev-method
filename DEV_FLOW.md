@@ -111,7 +111,7 @@ Seal だけが計画・実装・レビュー・証跡のすべてを通す。dir
 flowchart TD
   D0["PaPut で過去の決定・却下案を検索<br/>（矛盾・supersede の確認）"] --> D1["コード探索<br/>（広ければ Explore サブエージェントへ委譲・要裏取り）"]
   D1 --> D2["direction 起草<br/>背景・診断 → 決定 → 却下した代替案 → 実装計画"]
-  D2 --> D3["並列境界別の実装ブリーフ<br/>Evidence Contract・契約・変更マップ・<br/>検証oracle・横断関心5点・やらないこと"]
+  D2 --> D3["並列境界別の実装ブリーフ<br/>Evidence Contract・契約・変更マップ・<br/>検証oracle・横断関心6点・やらないこと"]
   D3 --> D4["合意前計画レビュー（外部モデル・read-only）<br/>must / should / nit 全区分ゼロまで反復<br/>plan ledger で帳簿検証"]
   D4 --> D5{"ユーザー合意"}
   D5 --> I1["execution 起動<br/>並列境界ごとに implementer を spawn<br/>（worktree 分離・依存インストール）"]

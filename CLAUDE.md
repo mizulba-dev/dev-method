@@ -33,4 +33,4 @@
 ## 実装レーン
 
 - レーンは**爆発半径だけ**で決め、direction の有無とは独立（direction は設計合意の道具）。Ship は挙動に触れない変更を機械ゲートのみで通す。**Show（デフォルト）**は下位2レーンの基準に触れない変更を、機械ゲート → プレレビュー**1回**（**must-fix のみ即対応**、should-fix / nit は follow-up 1バッチ）で実装する。**Sign** は高リスク基準（DB migration・並行処理・認可・セキュリティ・境界間契約）または検知器の新設・変更を、pre + cross 各1回・統合裁定・must-fix 1バッチ修正・再レビューなし（Evidence Package・ledger・収束ループなし）で通す。**Seal** は不可逆×外部影響が重なる変更だけを direction フルパイプ（合意前計画レビュー・二者収束・Evidence・ledger）で回す。**Show は原義と異なり出荷前の1回レビューを指す**。機械ゲートは1回 green で完結とし、green 後の同一検証の再実行やレーン工程外の追加検証を足さない。
-- Show のUI変更は、リポジトリroot・worktree root・モノレポ配下のscenario-kit設定とscenarioを探索し、既存の有無にかかわらず最小scenarioを準備して smoke を実走する。scenario差分も規模見積もりに含め、基準超過時は上位レーンへ昇格する。Showのsmokeは `PASS`・`FAIL n件`・`評価不能` のいずれか（UI非変更は `対象外`）で、`未整備` は使わない。
+- Show のUI変更は、リポジトリroot・worktree root・モノレポ配下のscenario-kit設定とscenarioを探索し、既存の有無にかかわらず最小scenarioを準備して smoke を実走する。scenario差分も規模見積もりに含め、基準超過時は上位レーンへ昇格する。Showのsmokeは `PASS`・`FAIL n件`・`評価不能` のいずれか（UI非変更は `対象外`）で、`未整備` は使わない。issue が全件 RSC プリフェッチ中断（`ERR_ABORTED` かつ `?_rsc=`）のみで他の issue が0件なら `PASS` と裁定してよい。

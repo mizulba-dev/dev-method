@@ -21,6 +21,9 @@ const CODEX_EVENT_MSG = new Set([
   'mcp_tool_call_begin', 'mcp_tool_call_end', 'user_message', 'agent_message',
   'thread_settings_applied', 'patch_apply_begin', 'patch_apply_end', 'sub_agent_activity', 'context_compacted',
   'agent_reasoning', 'web_search_end', 'thread_rolled_back', 'image_generation_end',
+  // item_completed は response_item（reasoning / message / custom_tool_call 等）の完了ミラー。MCP・web 検索も
+  // custom_tool_call 経由で pending 追跡されるため、時間帰属は既存規則のままで追加の pending 追跡はしない。
+  'item_completed',
 ]);
 const CODEX_RESPONSE_ITEM = new Set([
   'message', 'reasoning', 'custom_tool_call', 'custom_tool_call_output',

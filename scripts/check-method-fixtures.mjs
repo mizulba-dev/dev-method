@@ -932,6 +932,30 @@ function reviewParserFixtures() {
     ['xargs-direct-readonly', "find src -type f | sort | xargs rg -n \"pattern\"", 0, null],
     ['drift-xargs-direct-write', "find src -type f | xargs rm -f", 2, '"violationCount": 1'],
     ['drift-xargs-direct-sed-inplace', "find src -type f | xargs sed -i s/x/y/", 2, '"violationCount": 1'],
+    // 実行系 denylist 一本化（許可リスト漏れの誤検知を作らない）: 実ログ由来の閲覧系は後段・ループ本体でも
+    // 許可し、実行系 head・書込・置換内実行だけを違反に残す。
+    ['real-shasum-follower', "/bin/zsh -lc 'find src -name \"*.mjs\" | sort | xargs shasum -a 256'", 0, null],
+    ['real-while-read-sed-loop', "/bin/zsh -lc 'find src -name \"*.md\" | sort | tail -3 | while read f; do echo \"$f\"; sed -n \"1,8p\" \"$f\"; done'", 0, null],
+    ['real-while-nl-loop', "/bin/zsh -lc 'find src -name \"*.mjs\" | while IFS= read -r f; do echo; nl -ba \"$f\"; done'", 0, null],
+    ['shc-benign-substitution', "rg --files | xargs -n1 sh -c 'echo \"$(git rev-parse HEAD)\"; cat \"$0\"'", 0, null],
+    ['drift-pipe-node', "/bin/zsh -lc 'cat x.json | node x.mjs'", 2, '"violationCount": 1'],
+    ['drift-follower-redirect', "/bin/zsh -lc 'git diff | grep x > out.txt'", 2, '"violationCount": 1'],
+    ['drift-follower-sed-inplace', "/bin/zsh -lc 'cat a | sed -i s/x/y/ a'", 2, '"violationCount": 1'],
+    ['drift-follower-substitution', "/bin/zsh -lc 'git diff | grep \"$(npm test)\"'", 2, '"violationCount": 1'],
+    // 実効コマンド解決の一貫性: 制御前置を剥がした本体（ループ本体等）は後段と同じ実行位置として扱い、
+    // 変更系 git・xargs のオプション消費・実行系 prefix ラッパー・/dev/null 宛リダイレクトを固定する。
+    ['drift-loop-body-exec', "/bin/zsh -lc 'find src | while read f; do node \"$f\"; done'", 2, '"violationCount": 1'],
+    ['drift-loop-body-git-checkout', "/bin/zsh -lc 'for f in a b; do git checkout -- \"$f\"; done'", 2, '"violationCount": 1'],
+    ['drift-follower-git-apply', "/bin/zsh -lc \"printf 'x' | git apply\"", 2, '"violationCount": 1'],
+    ['readonly-follower-git-log', "/bin/zsh -lc 'cat list | xargs git log --oneline -1'", 0, null],
+    ['drift-xargs-long-flag-exec', "/bin/zsh -lc 'rg --files | xargs --max-procs 1 node task.mjs'", 2, '"violationCount": 1'],
+    ['drift-xargs-replace-exec', "/bin/zsh -lc 'rg --files | xargs -I{} node task.mjs {}'", 2, '"violationCount": 1'],
+    ['readonly-xargs-long-flag-eq', "/bin/zsh -lc 'rg --files | xargs --max-procs=1 rg -n pattern'", 0, null],
+    ['drift-xargs-unknown-long-flag', "/bin/zsh -lc 'rg --files | xargs --frobnicate rg -n pattern'", 2, '"unparseableCommandCount": 1'],
+    ['drift-env-wrapper-exec', "/bin/zsh -lc 'git diff HEAD | env node scripts/run.mjs'", 2, '"violationCount": 1'],
+    ['drift-timeout-wrapper-exec', "/bin/zsh -lc 'cat x | timeout 30 node scripts/run.mjs'", 2, '"violationCount": 1'],
+    ['readonly-nice-wrapper', "/bin/zsh -lc 'cat x | nice sed -n 1,5p'", 0, null],
+    ['readonly-devnull-redirect', "/bin/zsh -lc 'git diff | grep x 2>/dev/null'", 0, null],
   ];
   for (const [name, command, exitCode, outputIncl] of codexCommandCases) {
     const log = join(root, `cmd-${name}.jsonl`);
@@ -1593,6 +1617,24 @@ function sessionMetricsRealTranscriptFixtures(dir, runMetrics, iso, invariantHol
   // tool_search_call→output（1000→1500）と web_search_call→end（2500→3000）は pending 追跡され
   // toolExecutionMs へ帰属する（llmGeneration への誤帰属だと 1000/4500 の配分が崩れて検知される）。
   assertion('mc-codex-new-kinds-tool-attribution', s0(newKindsRun).breakdown.toolExecutionMs === 1000 && s0(newKindsRun).breakdown.llmGenerationMs === 4500 && s0(newKindsRun).quality.orphanToolUses === 0, { bd: newKindsRun.json && s0(newKindsRun).breakdown, o: newKindsRun.json && s0(newKindsRun).quality.orphanToolUses });
+
+  // item_completed（2026-08-07 実ログ由来）は response_item の完了ミラー。MCP・web 検索も custom_tool_call 経由で
+  // pending 追跡されるため、ミラーを既知化しても call→output 区間は toolExecutionMs のまま保たれる。
+  const itemKinds = [
+    { type: 'session_meta', timestamp: iso(0), payload: { id: 'anon', cwd: '/anon/repo', source: 'cli' } },
+    { type: 'event_msg', timestamp: iso(500), payload: { type: 'task_started', started_at: iso(500) } },
+    { type: 'response_item', timestamp: iso(1000), payload: { type: 'custom_tool_call', name: 'exec', call_id: 'call_anon2', input: '' } },
+    { type: 'event_msg', timestamp: iso(1500), payload: { type: 'item_completed', item: { type: 'McpToolCall', id: 'exec-anon2', server: 'anon', tool: 'anon_tool' } } },
+    { type: 'response_item', timestamp: iso(2000), payload: { type: 'custom_tool_call_output', call_id: 'call_anon2' } },
+    { type: 'event_msg', timestamp: iso(2500), payload: { type: 'item_completed', item: { type: 'Reasoning', id: 'rs_anon2' } } },
+    { type: 'event_msg', timestamp: iso(3000), payload: { type: 'task_complete', duration_ms: 2500, completed_at: iso(3000) } },
+  ];
+  const itemKindsPath = join(dir, 'codex-item-completed.jsonl');
+  writeFileSync(itemKindsPath, `${itemKinds.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  const itemKindsRun = runMetrics([itemKindsPath]);
+  assertion('mc-codex-item-completed-clean-quality', itemKindsRun.status === 0 && s0(itemKindsRun).quality.unknownEvents === 0 && s0(itemKindsRun).quality.orphanToolUses === 0, { q: itemKindsRun.json && s0(itemKindsRun).quality });
+  assertion('mc-codex-item-completed-invariant', invariantHolds(s0(itemKindsRun)));
+  assertion('mc-codex-item-completed-attribution', s0(itemKindsRun).breakdown.toolExecutionMs === 1000 && s0(itemKindsRun).breakdown.llmGenerationMs === 1500 && s0(itemKindsRun).breakdown.unattributedMs === 0, { bd: itemKindsRun.json && s0(itemKindsRun).breakdown });
 }
 
 function main() {

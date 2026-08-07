@@ -625,6 +625,42 @@ const CLAUSE_PAIRS = [
     regex: /担当へのメッセージ送信・再開指示の前に、宛先を現行工程の稼働中担当一覧と照合する.*/,
   },
   {
+    id: '並列境界: worktree常駐プロセス停止とポート割り当て（execution両版）',
+    fileA: 'src/plugin-claude/skills/execution/SKILL.md',
+    fileB: 'src/plugin-codex/skills/execution/SKILL.md',
+    regex: /境界間で共有されるポート（API サーバ・dev サーバ・スタブ）は spawn 指示で境界ごとに割り当て.*/,
+  },
+  {
+    id: '手順6: コミット禁止のgit log機械確認と証跡経路確認（execution両版）',
+    fileA: 'src/plugin-claude/skills/execution/SKILL.md',
+    fileB: 'src/plugin-codex/skills/execution/SKILL.md',
+    regex: /あわせて対象リポジトリの `git log` を開始時 HEAD と照合し.*/,
+  },
+  {
+    id: '手順8: smoke RSCプリフェッチ中断のPASS裁定（execution両版）',
+    fileA: 'src/plugin-claude/skills/execution/SKILL.md',
+    fileB: 'src/plugin-codex/skills/execution/SKILL.md',
+    regex: /smoke が fail でも、issue が全件 RSC プリフェッチ中断.*?`PASS` と裁定してよい/,
+  },
+  {
+    id: '手順8: smoke RSCプリフェッチ中断のPASS裁定（direction ↔ execution claude）',
+    fileA: 'src/plugin/skills/direction/SKILL.md',
+    fileB: 'src/plugin-claude/skills/execution/SKILL.md',
+    regex: /smoke が fail でも、issue が全件 RSC プリフェッチ中断.*?`PASS` と裁定してよい/,
+  },
+  {
+    id: 'implementer: 証跡の本番同経路と常駐プロセス停止',
+    fileA: 'src/plugin-claude/agents/implementer.md',
+    fileB: 'src/plugin-codex/skills/execution/dev-method-implementer.toml',
+    regex: /実データ・既存実装の事実（DB の実データ形・既存パーサの出力等）を根拠に判断を主張するときは.*/,
+  },
+  {
+    id: 'implementer-critical: 証跡の本番同経路と常駐プロセス停止',
+    fileA: 'src/plugin-claude/agents/implementer-critical.md',
+    fileB: 'src/plugin-codex/skills/execution/dev-method-implementer-critical.toml',
+    regex: /実データ・既存実装の事実（DB の実データ形・既存パーサの出力等）を根拠に判断を主張するときは.*/,
+  },
+  {
     id: '必須実測: turn窓限定検算の定義（method-check ↔ direction）',
     fileA: 'src/plugin/skills/method-check/SKILL.md',
     fileB: 'src/plugin/skills/direction/SKILL.md',
