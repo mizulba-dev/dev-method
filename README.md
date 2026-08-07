@@ -73,7 +73,7 @@ codex plugin add dev-method-codex@mizulba-dev
 
 | プラグイン | 中身 | インストール先 |
 | --- | --- | --- |
-| `dev-method` | 共通スキル: `direction` / `setup` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` | Claude Code / Codex 両方 |
+| `dev-method` | 共通スキル: `direction` / `setup` / `cross-review` / `method-check` / `playwright-cli` / `scenario-kit` / `plugin-release` / `bug-diagnosis` / `keel` | Claude Code / Codex 両方 |
 | `dev-method-claude` | `execution`（通常 Sonnet/medium・高リスク Opus/high）+ implementer/reviewer agents | Claude Code のみ |
 | `dev-method-codex` | `execution`（通常 GPT-5.6 Terra/medium・高リスク GPT-5.6 Sol/high）+ implementer/reviewer 定義 + `SubagentStop` 終了通知 hook | Codex のみ |
 
@@ -126,6 +126,7 @@ $dev-method:setup
 | `scenario-kit` | 1つの Playwright シナリオを3用途に使い回す: デモ動画（`run`）、ドキュメント用スクリーンショット（`shots`）、実装後の軽量検証（`smoke`） |
 | `playwright-cli` | ブラウザ自動化 CLI の使い方（公式 @playwright/cli 配布スキルの取り込み） |
 | `plugin-release` | バージョンバンプ → tag push → 配布 → 両 CLI 反映までの一気通貫リリース |
+| `keel` | サービステンプレート keel からの新サービス立ち上げ: リポジトリ生成 → bootstrap 置換 → 動作確認 → PaPut・CLI 設定まで |
 
 `execution` の運用上の要点として、**検証の実行は implementer の1回を正とし**、リーダーもレビュアーも証跡（実行コマンド・exit code・pass/fail 件数）で確認して再実行しない（例外は検知器変更時の異ベンダー独立実行検証のみ）。Seal では共同ラウンド開始時の同じ diff 指紋へ、役割別の固定モデル（Claude 上は Opus、Codex 上は GPT-5.6 Sol）の専用 reviewer と異ベンダー `cross-review` を並列起動し、両結果を根本原因単位に統合して、同一版への二者承認まで反復する。
 
