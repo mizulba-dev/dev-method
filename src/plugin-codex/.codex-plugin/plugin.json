@@ -1,7 +1,7 @@
 {
   "name": "dev-method-codex",
   "description": "dev-method の Codex 専用部分 — multi_agent サブエージェントへ委譲する実装工程（execution）と終了通知 hook。共通スキルは dev-method 本体に。Claude Code にはインストール不要",
-  "version": "0.1.67",
+  "version": "0.1.68",
   "author": {
     "name": "mizulba"
   },
