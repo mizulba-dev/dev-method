@@ -8,6 +8,42 @@ const LANE_SOURCES = [
 
 const LANE_CONTRACTS = [
   {
+    id: 'ローカル例外の適用順',
+    test: ({ exception }) => hasInOrder(exception, [
+      /Seal → Sign → Show/,
+      /通常判定より先/,
+    ]),
+  },
+  {
+    id: 'ローカル例外の必要条件',
+    test: ({ exception }) => hasInOrder(exception, [
+      /実行・入出力・影響がすべて/,
+      /ローカル環境内.*完結/,
+      /かつ非公開・非配布/,
+      /公開・配布しない/,
+      /所有者.*条件に含めない/,
+    ]),
+  },
+  {
+    id: 'ローカル例外のShip/Show上限',
+    test: ({ exception }) => hasInOrder(exception, [
+      /Ship \/ Show を上限/,
+      /挙動非変更.*Ship/,
+      /挙動変更.*Show/,
+    ]),
+  },
+  {
+    id: '公開・配布物の通常判定維持',
+    test: ({ exception }) => hasInOrder(exception, [
+      /scenario-kit/,
+      /npm 公開物/,
+      /プラグイン/,
+      /公開または配布する自己ツール/,
+      /例外対象外/,
+      /通常基準を適用する/,
+    ]),
+  },
+  {
     id: 'Ship判定基準',
     test: ({ lane, compact }) => hasInOrder(lane('Ship'), compact ? [
       /挙動に触れない変更/,
@@ -717,6 +753,13 @@ function laneLine(text, laneName) {
   return normalized.slice(start, end);
 }
 
+function localExceptionLine(text) {
+  const line = text.split(/\r?\n/).find((candidate) => (
+    normalizeLaneMeaning(candidate).includes('ローカル例外:')
+  ));
+  return normalizeLaneMeaning(line || '');
+}
+
 function checkLaneContracts(reader) {
   const mismatches = [];
   for (const [sourceName, file] of LANE_SOURCES) {
@@ -724,6 +767,7 @@ function checkLaneContracts(reader) {
     const context = {
       document: normalizeLaneMeaning(raw),
       lane: (laneName) => laneLine(raw, laneName),
+      exception: localExceptionLine(raw),
       compact: file === 'CLAUDE.md',
     };
     for (const contract of LANE_CONTRACTS) {
@@ -769,17 +813,28 @@ function checkPairs(reader) {
   return mismatches;
 }
 
-const laneAssetOverrideIndex = process.argv.indexOf('--lane-asset');
-const laneAssetOverride = laneAssetOverrideIndex === -1 ? null : process.argv[laneAssetOverrideIndex + 1];
-if (laneAssetOverrideIndex !== -1 && !laneAssetOverride) {
-  console.error('--lane-asset には検体ファイルを指定する');
-  process.exit(2);
+function overridePath(flag) {
+  const index = process.argv.indexOf(flag);
+  if (index === -1) return null;
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith('--')) {
+    console.error(`${flag} には検体ファイルを指定する`);
+    process.exit(2);
+  }
+  return value;
 }
-const diskReader = (file) => (
-  file === 'src/plugin/skills/setup/assets/global-lane-rules.md' && laneAssetOverride
-    ? readFileSync(laneAssetOverride, 'utf8')
-    : readFileSync(file, 'utf8')
-);
+
+const laneAssetOverride = overridePath('--lane-asset');
+const repositoryClaudeOverride = overridePath('--repository-claude');
+const diskReader = (file) => {
+  if (file === 'src/plugin/skills/setup/assets/global-lane-rules.md' && laneAssetOverride) {
+    return readFileSync(laneAssetOverride, 'utf8');
+  }
+  if (file === 'CLAUDE.md' && repositoryClaudeOverride) {
+    return readFileSync(repositoryClaudeOverride, 'utf8');
+  }
+  return readFileSync(file, 'utf8');
+};
 const mismatches = checkPairs(diskReader);
 if (mismatches.length > 0) {
   console.error('並行条項の不一致:');

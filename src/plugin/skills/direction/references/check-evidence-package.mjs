@@ -591,8 +591,8 @@ function resolveLocalFile(base, specifier) {
 const REGISTERED_REPOSITORY_RESOLVERS = new Map([
   ['scripts/check-method-fixtures.mjs', '03eea3157fada15720c6883efc21c3a1a9863fa3c759b87de2d0ced8f8a730c8'],
   ['scripts/check-model-map.mjs', '70dd476fe2be1b86a8e86adad725f435b8384b19736e6361fbcb8b4364518772'],
-  ['scripts/check-setup-lanes-fixtures.mjs', 'ba164e4f0ce684b6e11a5f3fa67105798bf3ea46d760fd768992ff8cd0d0527b'],
-  ['scripts/check-shared-clauses.mjs', 'bde162b509aca1249b48efe98e61043b6e63acbc48885276341780c5f9b4e875'],
+  ['scripts/check-setup-lanes-fixtures.mjs', 'e17de2ac7f36b644b689f724bd58dccdbaa1550e70d8e9080065dc8c13261c0a'],
+  ['scripts/check-shared-clauses.mjs', '205f3707ff22175f18913152099616d88ec131058a13b724d8786df0994d518a'],
 ]);
 
 function resolveOracleInputs(root, command) {

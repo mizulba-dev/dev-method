@@ -40,6 +40,7 @@ let passed = 0;
 let failed = 0;
 const failures = [];
 let driftPassed = 0;
+let driftTotal = 0;
 
 function assertion(name, condition, detail = '') {
   if (condition) {
@@ -506,6 +507,11 @@ try {
 
   mkdirSync(mutationDir, { recursive: true });
   const mutationCases = [
+    ['local-exception-order', (body) => body.replace('通常判定より先に', '通常判定の後に'), 'ローカル例外の適用順'],
+    ['local-exception-local-completion', (body) => body.replace('実行・入出力・影響がすべて開発者のローカル環境内で完結し、かつ', '所有者の環境で使い、'), 'ローカル例外の必要条件'],
+    ['local-exception-private', (body) => body.replace('非公開・非配布（成果物を公開・配布しない）', '公開条件を問わない'), 'ローカル例外の必要条件'],
+    ['local-exception-upper-bound', (body) => body.replace('Ship / Show を上限', 'Show を上限'), 'ローカル例外のShip/Show上限'],
+    ['local-exception-public', (body) => body.replace('例外対象外で、通常基準を適用する', '例外対象とする'), '公開・配布物の通常判定維持'],
     ['ship-criteria', (body) => body.replace('挙動に触れない:', '小さな変更:'), 'Ship判定基準'],
     ['show-criteria', (body) => body.replace('下位2レーンの基準に触れないすべて', '通常の変更'), 'Show判定基準'],
     ['sign-criteria', (body) => body.replace('DB migration', 'DB作業'), 'Sign判定基準'],
@@ -513,6 +519,7 @@ try {
     ['show-process', (body) => body.replace('プレレビュー**1回**', 'プレレビュー**2回**'), 'Show工程'],
     ['sign-process', (body) => body.replace('pre + cross を各1回', 'pre + cross を各2回'), 'Sign工程'],
   ];
+  driftTotal = mutationCases.length;
   for (const [name, mutate, diagnostic] of mutationCases) {
     const specimen = join(mutationDir, `${name}.md`);
     writeFileSync(specimen, `${mutate(asset)}\n`);
@@ -540,9 +547,9 @@ try {
 }
 
 if (failed > 0) {
-  console.error(`check-setup-lanes-fixtures: ${passed} pass, ${failed} fail; deliberate drifts ${driftPassed}/6`);
+  console.error(`check-setup-lanes-fixtures: ${passed} pass, ${failed} fail; deliberate drifts ${driftPassed}/${driftTotal}`);
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log(`check-setup-lanes-fixtures: ${passed} pass, 0 fail; deliberate drifts ${driftPassed}/6`);
+console.log(`check-setup-lanes-fixtures: ${passed} pass, 0 fail; deliberate drifts ${driftPassed}/${driftTotal}`);
