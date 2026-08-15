@@ -1,3 +1,4 @@
+import { normalizeTxt } from './cloudflare.mjs';
 import { checkDkimPublished } from './dns-verify.mjs';
 import { planDnsRecords } from './dns-plan.mjs';
 import {
@@ -22,11 +23,25 @@ export async function observeStage2({ config, cf, google, resolveTxt }) {
   } catch (error) {
     verificationError = error.message;
   }
-  const group = await google.getGroup(config.mail.address);
-  const groupSettings = group ? await google.getGroupSettings(config.mail.address) : null;
-  const members = group ? await google.listMembers(config.mail.address) : [];
-  const filters = google.gmail ? await google.listFilters() : [];
-  const sendAs = google.gmail ? await google.listSendAs() : [];
+  // 未認証のセカンダリドメインでは 403 が返る。落とさず「観測不能」として記録し、残りの観測は続ける
+  // 認証済みドメインでの 403 は別の原因（権限不足）なので握りつぶさない
+  const unobservable = [];
+  const observe = async (name, fn, fallback) => {
+    try {
+      return await fn();
+    } catch (error) {
+      if (error.status === 403 && workspaceDomain?.verified !== true) {
+        unobservable.push(name);
+        return fallback;
+      }
+      throw error;
+    }
+  };
+  const group = await observe('group', () => google.getGroup(config.mail.address), null);
+  const groupSettings = group ? await observe('group settings', () => google.getGroupSettings(config.mail.address), null) : null;
+  const members = group ? await observe('group members', () => google.listMembers(config.mail.address), []) : [];
+  const filters = google.gmail ? await observe('gmail filters', () => google.listFilters(), []) : [];
+  const sendAs = google.gmail ? await observe('gmail sendAs', () => google.listSendAs(), []) : [];
   const dkim = await checkDkimPublished({
     domain: config.domain,
     selector: config.mail.records.dkim?.selector ?? 'google',
@@ -34,7 +49,7 @@ export async function observeStage2({ config, cf, google, resolveTxt }) {
     resolveTxt,
   });
   return {
-    zone, dnsRecords, workspaceDomain, verificationToken, verificationError, group, groupSettings, members, filters, sendAs, dkim,
+    zone, dnsRecords, workspaceDomain, verificationToken, verificationError, group, groupSettings, members, filters, sendAs, dkim, unobservable,
   };
 }
 
@@ -73,14 +88,32 @@ export function planStage2({ config, observation, executors = {} }) {
     }));
   }
 
-  steps.push(planResource({
-    resource: `workspace domain verification ${config.domain}`,
-    desired: { verified: true },
-    actual: observation.workspaceDomain ? { verified: Boolean(observation.workspaceDomain.verified) } : null,
-    fields: ['verified'],
-    note: '所有権確認の実行（TXT レコードは前工程で投入済み）',
-    apply: executors.verifyDomain ? () => executors.verifyDomain(config.domain) : undefined,
-  }));
+  // 所有権の確認は API では完結しない（webResource insert は 200 でも directory の verified が false のまま）
+  const verificationResource = `workspace domain verification ${config.domain}`;
+  if (observation.workspaceDomain?.verified) {
+    steps.push({
+      resource: verificationResource,
+      action: SKIP,
+      actual: { verified: true },
+      note: '確認済み（directory の domains.verified で確認）',
+      skipped: [],
+      redactFields: [],
+    });
+  } else {
+    const tokenPublished = Boolean(observation.verificationToken) && (observation.dnsRecords ?? [])
+      .some((record) => record.type === 'TXT' && normalizeTxt(record.content) === observation.verificationToken);
+    steps.push(manualStep({
+      resource: verificationResource,
+      note: '所有権の確認は API で完結しないため、管理コンソールで実行してください',
+      instructions: [
+        '管理コンソール > アカウント > ドメイン > ドメインを管理 で該当ドメインの「確認」を実行する',
+        tokenPublished
+          ? '確認 TXT レコードは投入済みです'
+          : '確認 TXT レコードは前工程で投入します（--execute で実行してから確認してください）',
+        '確認後にこのコマンドを再実行すると directory 側の verified を読んで skip します',
+      ],
+    }));
+  }
 
   const mailRecords = buildMailDnsRecords({
     domain: config.domain,
@@ -104,6 +137,20 @@ export function planStage2({ config, observation, executors = {} }) {
         '再実行すると権威サーバーへ直接問い合わせて DKIM レコードの実在を確認します',
       ],
     }));
+  }
+
+  const unobservable = observation.unobservable ?? [];
+  if (unobservable.length) {
+    steps.push(manualStep({
+      resource: 'workspace 観測不能',
+      note: `観測できない項目があります（ドメイン認証が未完了、またはサービスアカウントへのスコープ委任漏れ）: ${unobservable.join(', ')}`,
+      instructions: [
+        '先に所有権の確認（管理コンソール）を完了してください',
+        '確認済みなのに解消しない場合は、サービスアカウントへのドメイン全体委任のスコープを確認してください',
+        '解消するとグループ・Gmail の工程を計画できるようになります',
+      ],
+    }));
+    return steps;
   }
 
   const groupExists = Boolean(observation.group);

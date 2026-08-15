@@ -118,13 +118,11 @@ export function createGoogleClient({ adminToken, gmailToken, allowWrite = false,
       return payload?.domains ?? [];
     },
     addDomain: (domainName) => directory.post('/admin/directory/v1/customer/my_customer/domains', { domainName }),
+    // 確認の実行は API では完結しない（200 を返しても directory の verified が false のまま）。取得したトークンは TXT 投入にだけ使う
     getVerificationToken: (domain) => settings.post('/siteVerification/v1/token', {
       site: { type: 'INET_DOMAIN', identifier: domain },
       verificationMethod: 'DNS_TXT',
     }, { readOnlySafe: true }),
-    verifyDomain: (domain) => settings.post('/siteVerification/v1/webResource', {
-      site: { type: 'INET_DOMAIN', identifier: domain },
-    }, { query: { verificationMethod: 'DNS_TXT' } }),
     getGroup: (email) => getOrNull(directory, `/admin/directory/v1/groups/${encodeURIComponent(email)}`),
     createGroup: (body) => directory.post('/admin/directory/v1/groups', body),
     getGroupSettings: (email) => getOrNull(settings, `/groups/v1/groups/${encodeURIComponent(email)}`, { query: { alt: 'json' } }),

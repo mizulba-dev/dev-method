@@ -13,7 +13,7 @@ argument-hint: <設定ファイルのパス。無ければ設定例から起こ�
 | 入口 | 対象 | 書き込み |
 | --- | --- | --- |
 | `check.mjs <検索語 or ドメイン>` | ドメインの検索・空き確認・価格提示 | 一切しない |
-| `stage1.mjs --config <file>` | Vercel プロジェクト・環境変数・カスタムドメイン・DNS | `--execute` 時のみ |
+| `stage1.mjs --config <file>` | Vercel プロジェクト・環境変数・カスタムドメイン・DNS・初回 production デプロイ | `--execute` 時のみ |
 | `stage2.mjs --config <file>` | Workspace セカンダリドメイン・メール DNS・窓口グループ・Gmail | `--execute` 時のみ |
 
 Stage 1 だけでサイト公開は完結する。メールを持たないサービスは Stage 2 を実行しなくてよい。
@@ -26,7 +26,7 @@ Stage 1 だけでサイト公開は完結する。メールを持たないサー
   - `VERCEL_TOKEN`（project 作成とドメイン）
   - `GOOGLE_APPLICATION_CREDENTIALS`（サービスアカウント JSON のパス）と `GOOGLE_ADMIN_EMAIL`（委任先の管理者）
 - Google はドメイン全体委任で次のスコープを許可しておく:
-  `admin.directory.domain` / `admin.directory.group`（メンバー操作もこれで足りる） / `apps.groups.settings` / `siteverification` / `gmail.settings.basic` / `gmail.settings.sharing`
+  `admin.directory.domain` / `admin.directory.group`（メンバー操作もこれで足りる） / `apps.groups.settings` / `siteverification`（確認トークンの取得のみに使う） / `gmail.settings.basic` / `gmail.settings.sharing`
 
 ## 使い方
 
@@ -51,9 +51,10 @@ node $SKILL/scripts/stage2.mjs --config ./provisioning.json --execute
 ## 人が実行する工程
 
 1. **ドメインの購入** — Cloudflare ダッシュボードで行う（不可逆・課金のため、ツールは購入を持たない）
-2. **DKIM の有効化** — API が無い。管理コンソール > アプリ > Gmail > メールの認証 で鍵を生成し、値を設定ファイルの `mail.records.dkim` に転記して再実行（レコード投入）、そのうえで管理コンソールの「認証を開始」を押す。**完了判定は「レコードを入れたこと」ではなく、権威ネームサーバーへ直接問い合わせて DKIM レコードが実在すること**
-3. **Gmail「返信で使用するアドレス」** — Gmail API に該当フィールドが無い。設定 > アカウント で「メールを受信したアドレスから返信する」を選ぶ
-4. **MX / SPF / DKIM の値の転記** — Workspace 管理コンソールが提示する値を設定ファイルへ書く。ツールは決め打ちしない（提示形式は変わる）
+2. **Workspace の所有権確認** — API では完結しない（siteVerification の確認実行は 200 を返しても directory 側の `verified` が false のまま残る）。ツールは確認トークンの取得と TXT レコードの投入までを行い、そこで停止する。管理コンソール > アカウント > ドメイン で確認を実行し、再実行すると `domains.verified` を読んで skip する
+3. **DKIM の有効化** — API が無い。管理コンソール > アプリ > Gmail > メールの認証 で鍵を生成し、値を設定ファイルの `mail.records.dkim` に転記して再実行（レコード投入）、そのうえで管理コンソールの「認証を開始」を押す。**完了判定は「レコードを入れたこと」ではなく、権威ネームサーバーへ直接問い合わせて DKIM レコードが実在すること**
+4. **Gmail「返信で使用するアドレス」** — Gmail API に該当フィールドが無い。設定 > アカウント で「メールを受信したアドレスから返信する」を選ぶ
+5. **MX / SPF / DKIM の値の転記** — Workspace 管理コンソールが提示する値を設定ファイルへ書く。ツールは決め打ちしない（提示形式は変わる）
 
 ## 設計上の契約（変更するときはここを壊さない）
 
@@ -69,6 +70,8 @@ node $SKILL/scripts/stage2.mjs --config ./provisioning.json --execute
 - **dry-run では書き込み API を送出しない**（クライアントが GET 以外を拒否する。例外は状態を変えない所有権確認トークンの取得のみ）
 - **DRIFT が1件でもあれば `--execute` でも一切適用しない**。後方の乖離が先行する作成を抑止する
 - **同じ用途の DNS レコードは余剰も乖離**として報告する（古い SPF や A が残っていると機能しないため）
+- **ドメイン紐付けだけでは公開されない**。push が無ければサイトは 404 のままなので、production デプロイが1件も無ければ Stage 1 が起動する（1件でもあれば skip）
+- **未認証ドメインでは Workspace 側の観測が 403 になる**。観測全体を落とさず「認証が未完了で観測できない」として提示し、認証を先に済ませる工程へ誘導する
 - **ロールバックは実装しない**。全操作が可逆で、失敗時は部分適用のまま停止して適用状況を報告する
 
 ## テスト
@@ -82,4 +85,5 @@ node <このスキル>/tests/run-tests.mjs
 ## 未検証
 
 - Cloudflare Registrar API（`check.mjs`）はベータ。2026-08-15 の実測では `registrar/domains/domain-check` が HTTP 404（このアカウントでは未提供）で、空き確認は使えなかった。対応 TLD もエンドポイントも変わりうるため、失敗時は「ダッシュボードで確認する」旨を出して続行する設計にしてある
-- `--execute` の書き込み経路は実走未了（層3）。dry-run（読み取りのみ）は Cloudflare・Vercel・Workspace の実環境で確認済み
+- Cloudflare Registrar の検索・空き確認は、確認できない問い合わせが1件でもあれば exit 2 を返す（表示は続行する）
+- **初回 production デプロイの起動（`POST /v13/deployments`）は実走未了**。リクエストボディの形式は API ドキュメント由来の手組みで、実応答での確認をしていない。既存の DNS・Vercel・Workspace の書き込み経路は実サービスの立ち上げで実走済み

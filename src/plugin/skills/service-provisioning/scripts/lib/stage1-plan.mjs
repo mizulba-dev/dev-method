@@ -1,6 +1,8 @@
 import { planDnsRecords } from './dns-plan.mjs';
 import { manualStep, planResource } from './plan.mjs';
-import { buildCreateProjectBody, deriveDnsRecords, desiredEnv } from './vercel.mjs';
+import {
+  buildCreateProjectBody, buildDeploymentBody, deriveDnsRecords, desiredEnv, readyDeployments,
+} from './vercel.mjs';
 
 function comparableProject(project) {
   const link = project.link ?? {};
@@ -30,7 +32,8 @@ export async function observeStage1({ config, cf, vercel }) {
   const domains = project ? await vercel.listDomains(project.id) : [];
   const attached = domains.find((d) => d.name === config.domain) ?? null;
   const domainConfig = attached ? await vercel.domainConfig(config.domain) : null;
-  return { zone, dnsRecords, project, envs, domains, attached, domainConfig };
+  const deployments = project ? await vercel.listDeployments(project.id) : [];
+  return { zone, dnsRecords, project, envs, domains, attached, domainConfig, deployments };
 }
 
 export function planStage1({ config, observation, executors = {} }) {
@@ -101,6 +104,17 @@ export function planStage1({ config, observation, executors = {} }) {
     desired: desiredRecords,
     existing: observation.dnsRecords,
     createRecord: executors.createDnsRecord,
+  }));
+
+  // ドメインを紐付けただけでは push が無い限りサイトは 404 のまま
+  const deployed = readyDeployments(observation.deployments).length > 0;
+  steps.push(planResource({
+    resource: `vercel production deployment ${config.vercel.projectName}`,
+    desired: { target: 'production' },
+    actual: deployed ? { target: 'production' } : null,
+    fields: ['target'],
+    note: `初回の production デプロイを起動する（${config.vercel.productionBranch}）`,
+    apply: executors.createDeployment ? () => executors.createDeployment(buildDeploymentBody(config)) : undefined,
   }));
   return steps;
 }

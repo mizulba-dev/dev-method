@@ -23,8 +23,12 @@ import {
 } from '../scripts/lib/plan.mjs';
 import { clearSecrets, redact, registerSecret } from '../scripts/lib/secrets.mjs';
 import { observeStage1, planStage1 } from '../scripts/lib/stage1-plan.mjs';
-import { groupSettingsAsymmetry, planStage2, stage2Complete } from '../scripts/lib/stage2-plan.mjs';
-import { buildCreateProjectBody, createVercelClient, deriveDnsRecords, desiredEnv } from '../scripts/lib/vercel.mjs';
+import {
+  groupSettingsAsymmetry, observeStage2, planStage2, stage2Complete,
+} from '../scripts/lib/stage2-plan.mjs';
+import {
+  buildCreateProjectBody, buildDeploymentBody, createVercelClient, deriveDnsRecords, desiredEnv,
+} from '../scripts/lib/vercel.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => JSON.parse(readFileSync(join(here, 'fixtures', `${name}.json`), 'utf8')).response;
@@ -230,7 +234,7 @@ test('層1', '未登録でも Bearer / JWT / 秘密鍵の形は伏せる', () =>
 
 // ---------------------------------------------------------------- 層2: dry-run の出力
 
-function stage1Observation({ project, envs = [], attached, dnsRecords = [] } = {}) {
+function stage1Observation({ project, envs = [], attached, dnsRecords = [], deployments = [] } = {}) {
   return {
     zone: fixture('cf-zones').result[0],
     dnsRecords,
@@ -239,6 +243,7 @@ function stage1Observation({ project, envs = [], attached, dnsRecords = [] } = {
     domains: attached ? [attached] : [],
     attached: attached ?? null,
     domainConfig: attached ? fixture('vercel-domain-config') : null,
+    deployments,
   };
 }
 
@@ -344,6 +349,7 @@ function stage2Observation(overrides = {}) {
     sendAs: [],
     verificationToken: null,
     verificationError: 'テストでは未取得',
+    unobservable: [],
     dkim: { name: `google._domainkey.${DOMAIN}`, published: false, values: [] },
     ...overrides,
   };
@@ -574,7 +580,9 @@ test('層2', 'Stage2: 所有権確認の TXT は既存と照合して二重作�
   const txt = steps.filter((s) => s.resource === `dns TXT ${DOMAIN}` && s.note === 'workspace-verification');
   strictEqual(txt.length, 1);
   strictEqual(txt[0].action, SKIP, 'TXT 投入済みで verify 失敗後の再実行が二重作成してはいけない');
-  strictEqual(steps.find((s) => s.resource.startsWith('workspace domain verification')).action, DRIFT);
+  const verification = steps.find((s) => s.resource.startsWith('workspace domain verification'));
+  strictEqual(verification.action, MANUAL, '所有権確認は API で完結しないため人へ渡す');
+  strictEqual(verification.blocking, true);
 });
 
 // ---------------------------------------------------------------- DNS の余剰
@@ -731,16 +739,184 @@ await testAsync('層2.5', 'Stage2 の executor が所有権確認を TXT 投入�
   const steps = planStage2({ config: baseConfig, observation, executors });
   await applySteps(steps, createMemoryLogger());
   const paths = calls.map((call) => `${call.method} ${new URL(call.url).pathname}`);
-  deepStrictEqual(paths.slice(0, 3), [
+  deepStrictEqual(paths.slice(0, 2), [
     'POST /admin/directory/v1/customer/my_customer/domains',
     `POST /client/v4/zones/${observation.zone.id}/dns_records`,
-    'POST /siteVerification/v1/webResource',
   ]);
   deepStrictEqual(calls[0].body, { domainName: DOMAIN });
   strictEqual(calls[1].body.content, VERIFICATION_TOKEN);
   strictEqual(calls[1].body.proxied, false);
-  deepStrictEqual(calls[2].body, { site: { type: 'INET_DOMAIN', identifier: DOMAIN } });
-  ok(calls.some((call) => call.body?.type === 'MX' && call.body.content === 'smtp.google.com'), 'メール DNS が適用されていない');
+  ok(!paths.some((path) => path.includes('webResource')), '所有権確認の実行を API で行ってはいけない');
+  ok(!calls.some((call) => call.body?.type === 'MX'), '確認が済むまでメール DNS へ進んではいけない');
+});
+
+// ---------------------------------------------------------------- 層3 実走で判明した契約差
+
+test('層2', 'Stage2: 所有権が確認済みなら skip する', () => {
+  const observation = provisionedObservation({ workspaceDomain: { domainName: DOMAIN, verified: true } });
+  const steps = planStage2({ config: provisionedConfig, observation });
+  strictEqual(steps.find((s) => s.resource.startsWith('workspace domain verification')).action, SKIP);
+  strictEqual(stage2Complete({ steps, observation }).complete, true);
+});
+
+await testAsync('層2', 'Stage2: 未認証ドメインの 403 は観測不能として扱い他の観測を続ける', async () => {
+  const forbidden = () => {
+    const error = new ApiError('google-directory', 'GET', '/groups', 403, 'not authorized');
+    return Promise.reject(error);
+  };
+  let listedDomains = false;
+  const google = {
+    gmail: {},
+    listDomains: async () => { listedDomains = true; return [{ domainName: DOMAIN, verified: false }]; },
+    getVerificationToken: async () => ({ token: VERIFICATION_TOKEN }),
+    getGroup: forbidden,
+    getGroupSettings: forbidden,
+    listMembers: forbidden,
+    listFilters: forbidden,
+    listSendAs: forbidden,
+  };
+  const cf = {
+    getZone: async () => fixture('cf-zones').result[0],
+    listDnsRecords: async () => [],
+  };
+  const observation = await observeStage2({
+    config: provisionedConfig, cf, google, resolveTxt: async () => [],
+  });
+  ok(listedDomains, '403 で観測全体を落としてはいけない');
+  deepStrictEqual(observation.unobservable, ['group', 'gmail filters', 'gmail sendAs']);
+  strictEqual(observation.verificationToken, VERIFICATION_TOKEN);
+
+  const steps = planStage2({ config: provisionedConfig, observation });
+  const blocked = steps.find((s) => s.resource === 'workspace 観測不能');
+  strictEqual(blocked.action, MANUAL);
+  strictEqual(blocked.blocking, true);
+  ok(blocked.note.includes('ドメイン認証が未完了'));
+  ok(!steps.some((s) => s.resource.startsWith('group ')), '観測できていない工程を計画してはいけない');
+});
+
+await testAsync('層2', 'Stage2: 403 以外の失敗は握りつぶさない', async () => {
+  const google = {
+    gmail: null,
+    listDomains: async () => [],
+    getVerificationToken: async () => ({ token: VERIFICATION_TOKEN }),
+    getGroup: async () => { throw new ApiError('google-directory', 'GET', '/groups', 500, ''); },
+  };
+  const cf = { getZone: async () => fixture('cf-zones').result[0], listDnsRecords: async () => [] };
+  let raised = false;
+  try {
+    await observeStage2({ config: provisionedConfig, cf, google, resolveTxt: async () => [] });
+  } catch (error) {
+    raised = error.status === 500;
+  }
+  ok(raised);
+});
+
+test('層2', 'Stage1: production デプロイが無ければ起動を提示し、あれば skip する', () => {
+  const attached = { ...fixture('vercel-project-domains').domains[0], name: DOMAIN, apexName: DOMAIN };
+  const ips = fixture('vercel-domain-config').recommendedIPv4[0].value;
+  const dnsRecords = ips.map((ip) => ({ type: 'A', name: DOMAIN, content: ip, proxied: false }));
+  const none = planStage1({ config: baseConfig, observation: stage1Observation({ project: realProject, attached, dnsRecords }) });
+  const step = none.find((s) => s.resource.startsWith('vercel production deployment'));
+  strictEqual(step.action, CREATE);
+  const existing = planStage1({
+    config: baseConfig,
+    observation: stage1Observation({
+      project: realProject, attached, dnsRecords, deployments: [{ uid: 'dpl_1', target: 'production', state: 'READY' }],
+    }),
+  });
+  strictEqual(existing.find((s) => s.resource.startsWith('vercel production deployment')).action, SKIP);
+});
+
+test('層1', 'デプロイのボディは GitHub の org/repo と本番ブランチを使う', () => {
+  deepStrictEqual(buildDeploymentBody(baseConfig), {
+    name: 'sample-service',
+    project: 'sample-service',
+    target: 'production',
+    gitSource: { type: 'github', org: 'your-org', repo: 'sample-service', ref: 'main' },
+  });
+  const custom = normalizeConfig({
+    service: 'sample-service', domain: DOMAIN, githubRepo: 'your-org/sample-service', vercel: { productionBranch: 'release' },
+  });
+  strictEqual(buildDeploymentBody(custom).gitSource.ref, 'release');
+  throws(() => buildDeploymentBody(normalizeConfig({ service: 'sample-service', domain: DOMAIN })), /githubRepo/);
+});
+
+await testAsync('層2.5', 'Stage1 の executor が production デプロイを起動する', async () => {
+  const { calls, fetchImpl } = recordingFetch(() => ({ id: 'dpl_new' }));
+  const attached = { ...fixture('vercel-project-domains').domains[0], name: DOMAIN, apexName: DOMAIN };
+  const ips = fixture('vercel-domain-config').recommendedIPv4[0].value;
+  const observation = stage1Observation({
+    project: realProject,
+    attached,
+    dnsRecords: ips.map((ip) => ({ type: 'A', name: DOMAIN, content: ip, proxied: false })),
+    envs: [{ key: 'NEXT_PUBLIC_SITE_URL', value: `https://${DOMAIN}`, type: 'plain', target: ['development', 'preview', 'production'] }],
+  });
+  const { executors } = createStage1Executors({
+    observation,
+    cf: createCloudflareClient({ token: 't', allowWrite: true, fetchImpl }),
+    vercel: createVercelClient({ token: 't', allowWrite: true, fetchImpl }),
+  });
+  const steps = planStage1({ config: baseConfig, observation, executors });
+  await applySteps(steps, createMemoryLogger());
+  strictEqual(calls.length, 1);
+  strictEqual(calls[0].method, 'POST');
+  ok(calls[0].url.includes('/v13/deployments'));
+  strictEqual(calls[0].body.target, 'production');
+  deepStrictEqual(calls[0].body.gitSource, { type: 'github', org: 'your-org', repo: 'sample-service', ref: 'main' });
+});
+
+test('層2', 'Stage1: 失敗・中断したデプロイは公開済みと数えない', () => {
+  const attached = { ...fixture('vercel-project-domains').domains[0], name: DOMAIN, apexName: DOMAIN };
+  const ips = fixture('vercel-domain-config').recommendedIPv4[0].value;
+  const dnsRecords = ips.map((ip) => ({ type: 'A', name: DOMAIN, content: ip, proxied: false }));
+  const deployStep = (deployments) => planStage1({
+    config: baseConfig,
+    observation: stage1Observation({ project: realProject, attached, dnsRecords, deployments }),
+  }).find((s) => s.resource.startsWith('vercel production deployment'));
+
+  strictEqual(deployStep([{ uid: 'dpl_1', state: 'ERROR' }, { uid: 'dpl_2', state: 'CANCELED' }]).action, CREATE);
+  strictEqual(deployStep([{ uid: 'dpl_1', state: 'BUILDING' }]).action, CREATE);
+  strictEqual(deployStep([{ uid: 'dpl_1', state: 'ERROR' }, { uid: 'dpl_2', state: 'READY' }]).action, SKIP);
+  // 旧フィールド名の応答でも READY を読む
+  strictEqual(deployStep([{ uid: 'dpl_1', readyState: 'READY' }]).action, SKIP);
+});
+
+await testAsync('層2', 'Stage2: 認証済みドメインでの 403 は握りつぶさない', async () => {
+  const google = {
+    gmail: {},
+    listDomains: async () => [{ domainName: DOMAIN, verified: true }],
+    getVerificationToken: async () => ({ token: VERIFICATION_TOKEN }),
+    getGroup: async () => { throw new ApiError('google-directory', 'GET', '/groups', 403, 'not authorized'); },
+  };
+  const cf = { getZone: async () => fixture('cf-zones').result[0], listDnsRecords: async () => [] };
+  let raised = false;
+  try {
+    await observeStage2({ config: provisionedConfig, cf, google, resolveTxt: async () => [] });
+  } catch (error) {
+    raised = error.status === 403;
+  }
+  ok(raised, '認証済みで 403 なら権限の問題として表に出すべき');
+});
+
+test('層2', 'Stage2: 観測不能の案内は認証未完了とスコープ委任漏れの両方を挙げる', () => {
+  const observation = provisionedObservation({
+    workspaceDomain: { domainName: DOMAIN, verified: false }, unobservable: ['group'],
+  });
+  const step = planStage2({ config: provisionedConfig, observation }).find((s) => s.resource === 'workspace 観測不能');
+  ok(step.note.includes('ドメイン認証が未完了'));
+  ok(step.note.includes('スコープ委任漏れ'));
+});
+
+test('層2', 'Stage2: 確認 TXT の投入状況で案内文を出し分ける', () => {
+  const pending = provisionedObservation({ workspaceDomain: { domainName: DOMAIN, verified: false }, dnsRecords: [] });
+  const pendingStep = planStage2({ config: provisionedConfig, observation: pending })
+    .find((s) => s.resource.startsWith('workspace domain verification'));
+  ok(pendingStep.instructions.some((line) => line.includes('前工程で投入します')));
+
+  const published = provisionedObservation({ workspaceDomain: { domainName: DOMAIN, verified: false } });
+  const publishedStep = planStage2({ config: provisionedConfig, observation: published })
+    .find((s) => s.resource.startsWith('workspace domain verification'));
+  ok(publishedStep.instructions.some((line) => line.includes('投入済みです')));
 });
 
 // ---------------------------------------------------------------- check の失敗の扱い

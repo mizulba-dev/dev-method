@@ -28,6 +28,7 @@ export function normalizeConfig(input) {
       projectName: vercel.projectName ?? c.service,
       rootDirectory: vercel.rootDirectory ?? null,
       framework: vercel.framework ?? null,
+      productionBranch: vercel.productionBranch ?? 'main',
       env: Array.isArray(vercel.env) ? vercel.env : [],
     },
     mail: {

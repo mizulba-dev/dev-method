@@ -81,6 +81,28 @@ export function createVercelClient({ token, teamId, allowWrite = false, fetchImp
     getDomain: (projectId, domain) => getOrNull(`/v9/projects/${projectId}/domains/${domain}`),
     addDomain: (projectId, name) => http.post(`/v10/projects/${projectId}/domains`, { name }, { query: scope }),
     domainConfig: (domain) => getOrNull(`/v6/domains/${domain}/config`),
+    async listDeployments(projectId, target = 'production') {
+      const payload = await getOrNull('/v6/deployments', { query: { projectId, target, limit: 5 } });
+      return payload?.deployments ?? [];
+    },
+    createDeployment: (body) => http.post('/v13/deployments', body, { query: scope }),
+  };
+}
+
+// 失敗・中断したデプロイは「公開済み」と数えない
+export function readyDeployments(deployments) {
+  return (deployments ?? []).filter((deployment) => (deployment.state ?? deployment.readyState) === 'READY');
+}
+
+// ドメインを紐付けても push が無ければサイトは 404 のままなので、初回の production デプロイを起こす
+export function buildDeploymentBody(config) {
+  if (!config.githubRepo) throw new Error('githubRepo が無いため production デプロイを起動できません');
+  const [org, repo] = config.githubRepo.split('/');
+  return {
+    name: config.vercel.projectName,
+    project: config.vercel.projectName,
+    target: 'production',
+    gitSource: { type: 'github', org, repo, ref: config.vercel.productionBranch },
   };
 }
 

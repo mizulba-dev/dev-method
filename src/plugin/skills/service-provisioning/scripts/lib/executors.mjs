@@ -24,6 +24,7 @@ export function createStage1Executors({ observation, cf, vercel }) {
     createEnv: (entries) => vercel.createEnv(projectId(), entries),
     addDomain: (domain) => vercel.addDomain(projectId(), domain),
     createDnsRecord: (record) => cf.createDnsRecord(observation.zone.id, dnsRecordBody(record)),
+    createDeployment: (body) => vercel.createDeployment(body),
   };
   return { executors, state };
 }
@@ -31,7 +32,6 @@ export function createStage1Executors({ observation, cf, vercel }) {
 export function createStage2Executors({ observation, cf, google }) {
   return {
     addDomain: (domain) => google.addDomain(domain),
-    verifyDomain: (domain) => google.verifyDomain(domain),
     createDnsRecord: (record) => cf.createDnsRecord(observation.zone.id, dnsRecordBody(record)),
     createGroup: (body) => google.createGroup(body),
     updateGroupSettings: (email, body) => google.updateGroupSettings(email, body),
