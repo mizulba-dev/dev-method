@@ -6,7 +6,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { comparableRecord, createCloudflareClient, normalizeTxt } from '../scripts/lib/cloudflare.mjs';
-import { printPlan, runPlan } from '../scripts/lib/cli.mjs';
+import { describeFailure } from '../scripts/check.mjs';
+import { parseArgs, printPlan, runPlan } from '../scripts/lib/cli.mjs';
+import { ApiError } from '../scripts/lib/http.mjs';
 import { assertStage1Config, normalizeConfig } from '../scripts/lib/config.mjs';
 import { createStage1Executors, createStage2Executors } from '../scripts/lib/executors.mjs';
 import { expandHome, parseEnvFile } from '../scripts/lib/credentials.mjs';
@@ -739,6 +741,24 @@ await testAsync('層2.5', 'Stage2 の executor が所有権確認を TXT 投入�
   strictEqual(calls[1].body.proxied, false);
   deepStrictEqual(calls[2].body, { site: { type: 'INET_DOMAIN', identifier: DOMAIN } });
   ok(calls.some((call) => call.body?.type === 'MX' && call.body.content === 'smtp.google.com'), 'メール DNS が適用されていない');
+});
+
+// ---------------------------------------------------------------- check の失敗の扱い
+
+test('層1', 'check の失敗理由を例外種別で出し分ける', () => {
+  const api = (status) => new ApiError('cloudflare', 'GET', '/registrar', status, '');
+  ok(describeFailure(api(404)).includes('提供されていません'));
+  ok(describeFailure(api(403)).includes('権限'));
+  ok(describeFailure(api(401)).includes('権限'));
+  ok(describeFailure(api(429)).includes('レート制限'));
+  ok(describeFailure(api(500)).includes('HTTP 500'));
+  ok(describeFailure(new TypeError('fetch failed')).includes('到達できませんでした'));
+  ok(describeFailure(new Error('Cloudflare domain-check が失敗しました: 1003')).includes('エラーを返しました'));
+});
+
+test('層1', 'check の引数はフラグを取り込まない', () => {
+  deepStrictEqual(parseArgs(['--config', 'a.json', '--execute']), { config: 'a.json', execute: true });
+  deepStrictEqual(parseArgs(['b.json']), { config: 'b.json', execute: false });
 });
 
 // ---------------------------------------------------------------- 結果

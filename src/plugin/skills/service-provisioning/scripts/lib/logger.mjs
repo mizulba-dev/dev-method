@@ -1,9 +1,8 @@
 import { redact, redactDeep } from './secrets.mjs';
 
-export function createLogger({ write, json = false } = {}) {
+export function createLogger({ write } = {}) {
   const sink = write ?? ((text) => process.stdout.write(`${text}\n`));
   return {
-    json,
     line(text) {
       sink(redact(String(text)));
     },
@@ -13,9 +12,9 @@ export function createLogger({ write, json = false } = {}) {
   };
 }
 
-export function createMemoryLogger({ json = false } = {}) {
+export function createMemoryLogger() {
   const lines = [];
-  const logger = createLogger({ write: (text) => lines.push(text), json });
+  const logger = createLogger({ write: (text) => lines.push(text) });
   logger.lines = lines;
   logger.text = () => lines.join('\n');
   return logger;

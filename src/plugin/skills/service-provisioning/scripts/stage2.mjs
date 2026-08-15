@@ -21,7 +21,7 @@ await main(async () => {
   if (!config.mail.enabled) throw new Error('設定に mail セクションがありません（Stage 2 はメール窓口の工程です）');
   const creds = loadCredentials(['CLOUDFLARE_API_TOKEN', 'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_ADMIN_EMAIL']);
   const serviceAccount = loadServiceAccount(creds.GOOGLE_APPLICATION_CREDENTIALS);
-  const logger = createLogger({ json: args.json });
+  const logger = createLogger();
 
   const adminToken = await fetchAccessToken({ serviceAccount, scopes: ADMIN_SCOPES, subject: creds.GOOGLE_ADMIN_EMAIL });
   const gmailToken = await fetchAccessToken({ serviceAccount, scopes: GMAIL_SCOPES, subject: config.mail.deliveryUser });

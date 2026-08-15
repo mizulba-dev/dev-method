@@ -2,11 +2,10 @@ import { applySteps, hasDrift, renderStep, summarize } from './plan.mjs';
 import { redact } from './secrets.mjs';
 
 export function parseArgs(argv) {
-  const args = { config: null, execute: false, json: false };
+  const args = { config: null, execute: false };
   for (let i = 0; i < argv.length; i += 1) {
     const value = argv[i];
     if (value === '--execute') args.execute = true;
-    else if (value === '--json') args.json = true;
     else if (value === '--config') { args.config = argv[i + 1]; i += 1; } else if (value.startsWith('--config=')) args.config = value.slice(9);
     else if (!args.config && !value.startsWith('-')) args.config = value;
   }

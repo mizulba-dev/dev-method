@@ -14,7 +14,7 @@ await main(async () => {
   const config = loadConfig(args.config);
   assertStage1Config(config);
   const creds = loadCredentials(['CLOUDFLARE_API_TOKEN', 'VERCEL_TOKEN']);
-  const logger = createLogger({ json: args.json });
+  const logger = createLogger();
 
   const readCf = createCloudflareClient({ token: creds.CLOUDFLARE_API_TOKEN });
   const readVercel = createVercelClient({ token: creds.VERCEL_TOKEN });

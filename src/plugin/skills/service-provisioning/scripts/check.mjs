@@ -3,6 +3,7 @@ import { createCloudflareClient } from './lib/cloudflare.mjs';
 import { loadCredentials } from './lib/credentials.mjs';
 import { createLogger } from './lib/logger.mjs';
 import { main } from './lib/cli.mjs';
+import { ApiError } from './lib/http.mjs';
 import { registerSecret } from './lib/secrets.mjs';
 
 export function formatPrice(entry) {
@@ -20,6 +21,17 @@ export function renderResults(results) {
   });
 }
 
+export function describeFailure(error) {
+  if (error instanceof ApiError) {
+    if (error.status === 404) return 'このアカウントでは提供されていません（Registrar API はベータで、対応 TLD とエンドポイントが限られます）';
+    if (error.status === 401 || error.status === 403) return 'API トークンの権限が足りません（Registrar の読み取り権限を確認してください）';
+    if (error.status === 429) return 'レート制限に達しました。時間をおいて再実行してください';
+    return `Cloudflare が HTTP ${error.status} を返しました`;
+  }
+  if (error?.message?.startsWith('Cloudflare ')) return `Cloudflare がエラーを返しました: ${error.message}`;
+  return `Cloudflare へ到達できませんでした（ネットワークまたは DNS の問題）: ${error.message}`;
+}
+
 await main(async () => {
   const queries = process.argv.slice(2).filter((value) => !value.startsWith('-'));
   if (queries.length === 0) throw new Error('使い方: check.mjs <検索語またはドメイン> [...]');
@@ -34,6 +46,7 @@ await main(async () => {
 
   const domains = queries.filter((q) => q.includes('.'));
   const terms = queries.filter((q) => !q.includes('.'));
+  const failures = [];
 
   for (const term of terms) {
     try {
@@ -41,8 +54,9 @@ await main(async () => {
       logger.line(`# 検索: ${term}`);
       for (const line of renderResults(result?.results ?? result ?? [])) logger.line(line);
     } catch (error) {
-      logger.line(`# 検索: ${term} — 利用できません（Registrar API はベータで、対応 TLD・エンドポイントが変わりえます）`);
-      logger.line(`  ${error.message}`);
+      failures.push(`検索: ${term}`);
+      logger.line(`# 検索: ${term} — 確認できませんでした`);
+      logger.line(`  ${describeFailure(error)}`);
     }
   }
   if (domains.length) {
@@ -51,10 +65,15 @@ await main(async () => {
       logger.line('# 空き確認');
       for (const line of renderResults(result?.results ?? result ?? [])) logger.line(line);
     } catch (error) {
-      logger.line('# 空き確認 — 利用できません（Registrar API はベータで、対応 TLD・エンドポイントが変わりえます）');
-      logger.line(`  ${error.message}`);
+      failures.push(`空き確認: ${domains.join(', ')}`);
+      logger.line('# 空き確認 — 確認できませんでした');
+      logger.line(`  ${describeFailure(error)}`);
     }
   }
   logger.line('購入はこのツールでは行いません。Cloudflare ダッシュボードで人が実行してください。');
+  if (failures.length) {
+    logger.line(`確認できなかった問い合わせが ${failures.length} 件あります: ${failures.join(' / ')}`);
+    return 2;
+  }
   return 0;
 });
