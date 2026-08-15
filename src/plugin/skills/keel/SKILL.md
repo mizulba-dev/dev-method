@@ -52,7 +52,11 @@ CI（gitleaks + build-test）が push で同じ検証を常設する。green を
 2. Claude Code: `~/.paput/projects` に `<alias>\t<リポジトリ絶対パス>` を1行追加。`.claude/settings.local.json` は既存サービスから流用
 3. Codex: `.codex/config.toml` を既存サービスからコピーし `X-PaPut-Project-Alias` を新 alias へ変更（URL は `https://mcp.paput.io/mcp` 固定・header-only 契約）
 
-## 6. 立ち上げ後
+## 6. 公開のプロビジョニング
+
+ドメイン・Vercel・メール窓口の設定は `service-provisioning` スキルで実行する（購入と DKIM 有効化は人が行う）。ドメイン未取得なら `check.mjs` で空きを確認してから購入する。
+
+## 7. 立ち上げ後
 
 - example モデル一式（`api/domain/model/example.go` ほか）を最初の業務モデルで置き換える（keel の README「bootstrap 後にやること」参照）
 - 生成された CLAUDE.md の「このサービス固有の設計」欄を埋める

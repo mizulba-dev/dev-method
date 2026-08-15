@@ -1,0 +1,46 @@
+{
+  "_source": {
+    "endpoint": "GET https://admin.googleapis.com/admin/directory/v1/customer/my_customer/domains",
+    "capturedAt": "2026-08-15"
+  },
+  "response": {
+    "kind": "admin#directory#domains",
+    "etag": "fixture00180000000000",
+    "domains": [
+      {
+        "kind": "admin#directory#domain",
+        "etag": "fixture00190000000000",
+        "domainName": "sample-service.example",
+        "domainAliases": [
+          {
+            "kind": "admin#directory#domainAlias",
+            "etag": "fixture00200000000000",
+            "domainAliasName": "sample-service.example.test-google-a.com",
+            "parentDomainName": "sample-service.example",
+            "verified": true,
+            "creationTime": "1785631608426"
+          }
+        ],
+        "isPrimary": false,
+        "verified": true,
+        "creationTime": "1785631608426"
+      },
+      {
+        "kind": "admin#directory#domain",
+        "etag": "fixture00210000000000",
+        "domainName": "other-service.example",
+        "isPrimary": false,
+        "verified": true,
+        "creationTime": "1786078935388"
+      },
+      {
+        "kind": "admin#directory#domain",
+        "etag": "fixture00220000000000",
+        "domainName": "brand.example",
+        "isPrimary": true,
+        "verified": true,
+        "creationTime": "1786761778276"
+      }
+    ]
+  }
+}

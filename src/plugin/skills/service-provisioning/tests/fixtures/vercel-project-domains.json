@@ -1,0 +1,27 @@
+{
+  "_source": {
+    "endpoint": "GET https://api.vercel.com/v9/projects/{projectId}/domains",
+    "capturedAt": "2026-08-15"
+  },
+  "response": {
+    "domains": [
+      {
+        "name": "sample-service.example",
+        "apexName": "sample-service.example",
+        "projectId": "prj_fixture00130000000000",
+        "redirect": null,
+        "redirectStatusCode": null,
+        "gitBranch": null,
+        "customEnvironmentId": null,
+        "updatedAt": 1785660707340,
+        "createdAt": 1785660707340,
+        "verified": true
+      }
+    ],
+    "pagination": {
+      "count": 1,
+      "next": null,
+      "prev": 1785660707340
+    }
+  }
+}

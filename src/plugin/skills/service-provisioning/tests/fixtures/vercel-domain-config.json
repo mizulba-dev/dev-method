@@ -1,0 +1,50 @@
+{
+  "_source": {
+    "endpoint": "GET https://api.vercel.com/v6/domains/{domain}/config",
+    "capturedAt": "2026-08-15"
+  },
+  "response": {
+    "configuredBy": "http",
+    "nameservers": [
+      "ns1.ns.cloudflare.com",
+      "ns2.ns.cloudflare.com"
+    ],
+    "serviceType": "external",
+    "cnames": [],
+    "aValues": [
+      "172.67.185.186",
+      "104.21.19.96"
+    ],
+    "conflicts": [],
+    "acceptedChallenges": [
+      "http-01"
+    ],
+    "recommendedIPv4": [
+      {
+        "rank": 1,
+        "value": [
+          "216.150.1.1",
+          "216.150.16.1"
+        ]
+      },
+      {
+        "rank": 2,
+        "value": [
+          "76.76.21.21"
+        ]
+      }
+    ],
+    "recommendedCNAME": [
+      {
+        "rank": 1,
+        "value": "aaaabbbbccccdddd.vercel-dns-016.com."
+      },
+      {
+        "rank": 2,
+        "value": "cname.vercel-dns.com."
+      }
+    ],
+    "ipStatus": "no-change",
+    "misconfigured": false
+  }
+}

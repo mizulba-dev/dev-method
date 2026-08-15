@@ -1,0 +1,29 @@
+{
+  "service": "sample-service",
+  "domain": "sample-service.example",
+  "githubRepo": "your-org/sample-service",
+  "vercel": {
+    "projectName": "sample-service",
+    "rootDirectory": "web",
+    "framework": "nextjs",
+    "env": [
+      {
+        "key": "NEXT_PUBLIC_SITE_URL",
+        "value": "https://sample-service.example",
+        "target": ["production", "preview", "development"]
+      }
+    ]
+  },
+  "mail": {
+    "localPart": "info",
+    "groupName": "sample-service 窓口",
+    "deliveryUser": "owner@example.com",
+    "dmarcRua": "mailto:dmarc-reports@example.com",
+    "_note": "records は Workspace 管理コンソールが提示する値へ置き換える。dkim はコンソールで鍵を生成してから { selector, content } を書く",
+    "records": {
+      "mx": [{ "priority": 1, "content": "smtp.google.com" }],
+      "spf": "v=spf1 include:_spf.google.com ~all",
+      "dkim": null
+    }
+  }
+}

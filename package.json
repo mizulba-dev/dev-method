@@ -4,7 +4,7 @@
   "private": true,
   "description": "開発手法プラグイン（Claude Code / Codex 両対応）",
   "scripts": {
-    "preversion": "node scripts/check-model-map.mjs && node scripts/check-shared-clauses.mjs && node scripts/check-setup-lanes-fixtures.mjs && node scripts/check-method-fixtures.mjs",
+    "preversion": "node scripts/check-model-map.mjs && node scripts/check-shared-clauses.mjs && node scripts/check-setup-lanes-fixtures.mjs && node scripts/check-method-fixtures.mjs && node src/plugin/skills/service-provisioning/tests/run-tests.mjs",
     "version": "node scripts/sync-plugin-version.mjs && git add src/plugin/.claude-plugin/plugin.json src/plugin/.codex-plugin/plugin.json src/plugin-claude/.claude-plugin/plugin.json src/plugin-claude/.codex-plugin/plugin.json src/plugin-codex/.claude-plugin/plugin.json src/plugin-codex/.codex-plugin/plugin.json"
   }
 }

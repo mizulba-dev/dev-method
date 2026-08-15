@@ -1,0 +1,63 @@
+{
+  "_source": {
+    "endpoint": "GET https://api.vercel.com/v10/projects/{projectId}/env",
+    "capturedAt": "2026-08-15"
+  },
+  "response": {
+    "envs": [
+      {
+        "type": "sensitive",
+        "key": "API_BASE_URL",
+        "value": "",
+        "target": [
+          "production",
+          "preview"
+        ],
+        "configurationId": null,
+        "createdAt": 1785660448485,
+        "updatedAt": 1785660448485,
+        "createdBy": "fixture00140000000000",
+        "updatedBy": null,
+        "id": "fixture00150000000000",
+        "decrypted": false,
+        "lastEditedByDisplayName": "owner"
+      },
+      {
+        "type": "sensitive",
+        "key": "NEXT_PUBLIC_SITE_URL",
+        "value": "",
+        "target": [
+          "production",
+          "preview"
+        ],
+        "configurationId": null,
+        "createdAt": 1785660448485,
+        "updatedAt": 1785660448485,
+        "createdBy": "fixture00140000000000",
+        "updatedBy": null,
+        "id": "fixture00160000000000",
+        "decrypted": false,
+        "lastEditedByDisplayName": "owner"
+      },
+      {
+        "type": "sensitive",
+        "key": "NEXT_PUBLIC_ALLOW_INDEXING",
+        "value": "",
+        "target": [
+          "production",
+          "preview"
+        ],
+        "configurationId": null,
+        "createdAt": 1785660448485,
+        "updatedAt": 1785665092505,
+        "createdBy": "fixture00140000000000",
+        "updatedBy": "fixture00140000000000",
+        "id": "fixture00170000000000",
+        "customEnvironmentIds": [],
+        "decrypted": false,
+        "lastEditedByDisplayName": "owner"
+      }
+    ],
+    "hiddenProductionEnvCount": 0
+  }
+}

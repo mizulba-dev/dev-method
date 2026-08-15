@@ -1,0 +1,205 @@
+{
+  "_source": {
+    "endpoint": "GET https://api.cloudflare.com/client/v4/zones?per_page=5",
+    "capturedAt": "2026-08-15"
+  },
+  "response": {
+    "result": [
+      {
+        "id": "fixture000100000000000",
+        "name": "sample-service.example",
+        "status": "active",
+        "paused": false,
+        "type": "full",
+        "development_mode": 0,
+        "name_servers": [
+          "ns1.ns.cloudflare.com",
+          "ns2.ns.cloudflare.com"
+        ],
+        "original_name_servers": null,
+        "original_registrar": null,
+        "original_dnshost": null,
+        "modified_on": "2026-08-02T00:33:45.273080Z",
+        "created_on": "2026-08-02T00:33:44.730541Z",
+        "activated_on": "2026-08-02T00:33:45.167481Z",
+        "vanity_name_servers": [],
+        "vanity_name_servers_ips": null,
+        "meta": {
+          "step": 4,
+          "custom_certificate_quota": 0,
+          "page_rule_quota": 3,
+          "phishing_detected": false
+        },
+        "owner": {
+          "id": null,
+          "type": "user",
+          "email": null
+        },
+        "account": {
+          "id": "fixture000200000000000",
+          "name": "owner@example.test's Account"
+        },
+        "tenant": {
+          "id": null,
+          "name": null
+        },
+        "tenant_unit": {
+          "id": null
+        },
+        "permissions": [
+          "#zone:read",
+          "#zone_settings:read",
+          "#dns_records:edit",
+          "#dns_records:read"
+        ],
+        "plan": {
+          "id": "fixture000300000000000",
+          "name": "Free Website",
+          "price": 0,
+          "currency": "USD",
+          "frequency": "",
+          "is_subscribed": false,
+          "can_subscribe": false,
+          "legacy_id": "free",
+          "legacy_discount": false,
+          "externally_managed": false
+        }
+      },
+      {
+        "id": "fixture000400000000000",
+        "name": "brand.example",
+        "status": "active",
+        "paused": false,
+        "type": "full",
+        "development_mode": 0,
+        "name_servers": [
+          "ns1.ns.cloudflare.com",
+          "ns2.ns.cloudflare.com"
+        ],
+        "original_name_servers": null,
+        "original_registrar": null,
+        "original_dnshost": null,
+        "modified_on": "2026-08-14T16:51:02.394315Z",
+        "created_on": "2026-08-14T16:51:01.843532Z",
+        "activated_on": "2026-08-14T16:51:02.263133Z",
+        "vanity_name_servers": [],
+        "vanity_name_servers_ips": null,
+        "meta": {
+          "step": 4,
+          "custom_certificate_quota": 0,
+          "page_rule_quota": 3,
+          "phishing_detected": false
+        },
+        "owner": {
+          "id": null,
+          "type": "user",
+          "email": null
+        },
+        "account": {
+          "id": "fixture000200000000000",
+          "name": "owner@example.test's Account"
+        },
+        "tenant": {
+          "id": null,
+          "name": null
+        },
+        "tenant_unit": {
+          "id": null
+        },
+        "permissions": [
+          "#zone:read",
+          "#zone_settings:read",
+          "#dns_records:edit",
+          "#dns_records:read"
+        ],
+        "plan": {
+          "id": "fixture000300000000000",
+          "name": "Free Website",
+          "price": 0,
+          "currency": "USD",
+          "frequency": "",
+          "is_subscribed": false,
+          "can_subscribe": false,
+          "legacy_id": "free",
+          "legacy_discount": false,
+          "externally_managed": false
+        }
+      },
+      {
+        "id": "fixture000500000000000",
+        "name": "other-service.example",
+        "status": "active",
+        "paused": false,
+        "type": "full",
+        "development_mode": 0,
+        "name_servers": [
+          "ns1.ns.cloudflare.com",
+          "ns2.ns.cloudflare.com"
+        ],
+        "original_name_servers": [
+          "01.dnsv.jp",
+          "02.dnsv.jp",
+          "03.dnsv.jp",
+          "04.dnsv.jp"
+        ],
+        "original_registrar": "gmo internet group, inc. d/b/a (id: 49)",
+        "original_dnshost": null,
+        "modified_on": "2026-08-06T23:13:57.522653Z",
+        "created_on": "2026-08-06T22:48:24.884056Z",
+        "activated_on": "2026-08-06T23:13:57.522653Z",
+        "vanity_name_servers": [],
+        "vanity_name_servers_ips": null,
+        "meta": {
+          "step": 2,
+          "custom_certificate_quota": 0,
+          "page_rule_quota": 3,
+          "phishing_detected": false
+        },
+        "owner": {
+          "id": null,
+          "type": "user",
+          "email": null
+        },
+        "account": {
+          "id": "fixture000200000000000",
+          "name": "owner@example.test's Account"
+        },
+        "tenant": {
+          "id": null,
+          "name": null
+        },
+        "tenant_unit": {
+          "id": null
+        },
+        "permissions": [
+          "#zone:read",
+          "#zone_settings:read",
+          "#dns_records:edit",
+          "#dns_records:read"
+        ],
+        "plan": {
+          "id": "fixture000300000000000",
+          "name": "Free Website",
+          "price": 0,
+          "currency": "USD",
+          "frequency": "",
+          "is_subscribed": false,
+          "can_subscribe": false,
+          "legacy_id": "free",
+          "legacy_discount": false,
+          "externally_managed": false
+        }
+      }
+    ],
+    "result_info": {
+      "page": 1,
+      "per_page": 5,
+      "total_pages": 1,
+      "count": 3,
+      "total_count": 3
+    },
+    "success": true,
+    "errors": [],
+    "messages": []
+  }
+}

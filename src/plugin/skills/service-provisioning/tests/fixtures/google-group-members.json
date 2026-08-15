@@ -1,0 +1,21 @@
+{
+  "_source": {
+    "endpoint": "GET https://admin.googleapis.com/admin/directory/v1/groups/{groupEmail}/members",
+    "capturedAt": "2026-08-15"
+  },
+  "response": {
+    "kind": "admin#directory#members",
+    "etag": "fixture00230000000000",
+    "members": [
+      {
+        "kind": "admin#directory#member",
+        "etag": "fixture00240000000000",
+        "id": "fixture00250000000000",
+        "email": "owner@brand.example",
+        "role": "OWNER",
+        "type": "USER",
+        "status": "ACTIVE"
+      }
+    ]
+  }
+}
